@@ -1,0 +1,16 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-c",
+      "-I./lib/raylib/src/",
+      "./lib/raylib/src/libraylib.a",
+      "-o",
+      "./build/wordgame.exe",
+      "./main.c"
+    ],
+    "directory": "/home/chris/repos/jammin",
+    "file": "/home/chris/repos/jammin/main.c",
+    "output": "/home/chris/repos/jammin/build/wordgame.exe"
+  }
+]
