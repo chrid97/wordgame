@@ -45,7 +45,15 @@ void load_words() {
     exit(1);
   }
 
-  for (int i = 0; i < sizeof(file); i++) {
+  fseek(file, 0, SEEK_END);
+  int file_length = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  int elements_read = fread(words, 1, file_length, file);
+  printf("%d\n", elements_read);
+
+  for (int i = 0; i < elements_read; i++) {
+    printf("%s", words[i]);
   }
 }
 
@@ -54,6 +62,7 @@ int main(int argc, char *argv[]) {
   // while (!WindowShouldClose()) {
   // }
 
+  load_words();
   char input[12];
   printf("Type word: \n");
   scanf("%s", input);
