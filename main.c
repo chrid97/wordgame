@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 typedef enum {
   A_WORDS,
@@ -37,9 +38,10 @@ typedef enum {
 
 char *words;
 int file_size;
+int total_words = 0;
 
 void load_words() {
-  char filename[32] = "words.txt";
+  char filename[32] = "all_words.txt";
   FILE *file = fopen(filename, "r");
   if (!file) {
     fprintf(stderr, "ERROR: Failed to load %s\n", filename);
@@ -51,12 +53,14 @@ void load_words() {
   file_size = ftell(file);
   fseek(file, 0, SEEK_SET);
 
-  // do i have to allocate 1 more byte for null terminator?
-  words = malloc(file_size);
+  words = malloc(file_size + 1);
   int elements_read = fread(words, 1, file_size, file);
+  words[elements_read] = '\0';
+
   for (int i = 0; i < elements_read; i++) {
     if (words[i] == '\n') {
       words[i] = '\0';
+      total_words++;
     }
   }
 
@@ -68,16 +72,24 @@ int main(int argc, char *argv[]) {
   printf("Type word: \n");
 
   char user_input[12];
-  scanf("%s", user_input);
+  scanf("%11s", user_input);
 
   char *p = words;
 
-  uint8_t user_input_pointer = 0;
-  uint8_t current_word_length = 0;
-  for (int i = 0; i < file_size; i++) {
-    if (words[i] != '\0') {
-      current_word_length++;
+  bool match_found = false;
+
+  for (int i = 0; i < total_words; i++) {
+    if (strcmp(p, user_input) == 0) {
+      match_found = true;
+      break;
     }
+    p += strlen(p) + 1;
+  }
+
+  if (match_found) {
+    printf("Match found\n");
+  } else {
+    printf("Match not found\n");
   }
 
   return 0;
