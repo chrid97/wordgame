@@ -1,9 +1,9 @@
-#include "raylib.h"
+// #include "raylib.h"
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 typedef enum {
   A_WORDS,
@@ -35,52 +35,49 @@ typedef enum {
   WORD_TYPE_COUNT
 } WordType;
 
-char words[200000][12];
+char *words;
+int file_size;
 
 void load_words() {
-  char filename[32] = "all_words.txt";
+  char filename[32] = "words.txt";
   FILE *file = fopen(filename, "r");
   if (!file) {
     fprintf(stderr, "ERROR: Failed to load %s\n", filename);
     exit(1);
   }
 
+  // handle fseek error
   fseek(file, 0, SEEK_END);
-  int file_length = ftell(file);
+  file_size = ftell(file);
   fseek(file, 0, SEEK_SET);
 
-  int elements_read = fread(words, 1, file_length, file);
-  printf("%d\n", elements_read);
-
+  // do i have to allocate 1 more byte for null terminator?
+  words = malloc(file_size);
+  int elements_read = fread(words, 1, file_size, file);
   for (int i = 0; i < elements_read; i++) {
-    printf("%s", words[i]);
+    if (words[i] == '\n') {
+      words[i] = '\0';
+    }
   }
+
+  fclose(file);
 }
 
 int main(int argc, char *argv[]) {
-  // InitWindow(960, 540, "Wordgame");
-  // while (!WindowShouldClose()) {
-  // }
-
   load_words();
-  char input[12];
   printf("Type word: \n");
-  scanf("%s", input);
 
-  char word_match[12];
-  bool word_found = false;
-  // while (fgets(word_match, sizeof(word_match), file) != NULL) {
-  //   word_match[strcspn(word_match, "\r\n")] = 0;
-  //   if (strcmp(input, word_match) == 0) {
-  //     word_found = true;
-  //     break;
-  //   }
-  // }
+  char user_input[12];
+  scanf("%s", user_input);
 
-  if (word_found) {
-    printf("found match!\n");
-  } else {
-    printf("no match found :(\n");
+  char *p = words;
+
+  uint8_t user_input_pointer = 0;
+  uint8_t current_word_length = 0;
+  for (int i = 0; i < file_size; i++) {
+    if (words[i] != '\0') {
+      current_word_length++;
+    }
   }
 
   return 0;
