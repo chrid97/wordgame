@@ -160,6 +160,8 @@ int main(int argc, char *argv[]) {
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       Vector2 mouse_pos = GetMousePosition();
 
+      // box
+
       for (int i = 0; i < 16; i++) {
         Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
 
@@ -173,6 +175,23 @@ int main(int argc, char *argv[]) {
           input[input_length++] = letter->tile_value;
           printf("%s\n", input);
         }
+      }
+
+      Rectangle mouse_box = {mouse_pos.x, mouse_pos.y, 0, 0};
+      Rectangle button = {400, 200, 140, 40};
+      char *word_pointer = words;
+      if (CheckCollisionRecs(mouse_box, button)) {
+        for (int i = 0; i < total_words; i++) {
+          int result = strcmp(input, word_pointer);
+
+          if (result == 0) {
+            printf("Match found\n");
+            break;
+          }
+          word_pointer += strlen(word_pointer) + 1;
+        }
+
+        printf("Match not found\n");
       }
     }
     //----------------------------------------------------------------------------------
