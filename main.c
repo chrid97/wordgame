@@ -23,19 +23,14 @@ typedef struct {
   int height;
 
   char tile_value;
-  bool tile_location;
+  TileLocation tile_location;
 } Entity;
-
-#define HAND_SIZE 16
-typedef struct {
-  Entity index[HAND_SIZE]; // index into letter bag
-  uint8_t size;
-} Hand;
 
 #define LETTER_BAG_SIZE 100
 typedef struct {
   Entity tiles[LETTER_BAG_SIZE];
-  uint8_t size;
+  uint8_t remaining; // tiles in the bag
+  uint8_t size;      // total number of tiles
 } LetterBag;
 //----------------------------------------------------------------------------------
 
@@ -45,7 +40,7 @@ typedef struct {
 char *words;
 int total_words = 0;
 
-Entity letter_bag[LETTER_BAG_SIZE] = {0};
+LetterBag letter_bag[LETTER_BAG_SIZE] = {0};
 //----------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------
@@ -85,7 +80,7 @@ void init_letter_bag() {
   int i = 0;
   for (int letter = 0; letter < 26; letter++) {
     for (int j = 0; j < letter_occurrence[letter]; j++) {
-      letter_bag[i++] = (Entity){
+      letter_bag->tiles[i++] = (Entity){
           .type = TILE,
           .tile_location = BAG,
           .position = {},
@@ -95,20 +90,15 @@ void init_letter_bag() {
       };
     }
   }
-}
-
-void draw_hand(Hand *hand) {
-  for (int i = 0; i < hand->size; i++) {
-    // hand->tiles[i] = ;
-  }
+  letter_bag->remaining = 100;
 }
 
 void shuffle_bag() {
   for (int i = 99; i > 0; i--) {
     int j = rand() % (i + 1);
-    Entity temp = letter_bag[i];
-    letter_bag[i] = letter_bag[j];
-    letter_bag[j] = temp;
+    Entity temp = letter_bag->tiles[i];
+    letter_bag->tiles[i] = letter_bag->tiles[j];
+    letter_bag->tiles[j] = temp;
   }
 }
 
@@ -162,6 +152,24 @@ int main(int argc, char *argv[]) {
     //----------------------------------------------------------------------------------
     BeginDrawing();
     ClearBackground(ORANGE);
+
+    for (int i = 0; i < 16; i++) {
+      uint8_t row = i / 4;
+      uint8_t col = i % 4;
+      uint8_t padding = 45;
+
+      Entity *current_letter =
+          &letter_bag->tiles[letter_bag->remaining - i - 1];
+      current_letter->width = 40;
+      current_letter->height = 40;
+      current_letter->position.x = col * padding;
+      current_letter->position.y = row * padding;
+      DrawRectangle(current_letter->position.x, current_letter->position.y,
+                    current_letter->width, current_letter->height, WHITE);
+      const char *letter = TextFormat("%c", current_letter->tile_value);
+      DrawText(letter, current_letter->position.x, current_letter->position.y,
+               30, BLACK);
+    }
 
     EndDrawing();
     //----------------------------------------------------------------------------------
