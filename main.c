@@ -29,6 +29,7 @@ typedef struct {
 #define LETTER_BAG_SIZE 100
 typedef struct {
   Entity tiles[LETTER_BAG_SIZE];
+  // uint8_t *deck;     // pointer to tiles
   uint8_t remaining; // tiles in the bag
   uint8_t size;      // total number of tiles
 } LetterBag;
@@ -40,7 +41,11 @@ typedef struct {
 char *words;
 int total_words = 0;
 
-LetterBag letter_bag[LETTER_BAG_SIZE] = {0};
+LetterBag letter_bag = {0};
+
+// do we want to include null terminator?
+char input[10];
+int input_length = 0;
 //----------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------
@@ -80,7 +85,7 @@ void init_letter_bag() {
   int i = 0;
   for (int letter = 0; letter < 26; letter++) {
     for (int j = 0; j < letter_occurrence[letter]; j++) {
-      letter_bag->tiles[i++] = (Entity){
+      letter_bag.tiles[i++] = (Entity){
           .type = TILE,
           .tile_location = BAG,
           .position = {},
@@ -90,15 +95,15 @@ void init_letter_bag() {
       };
     }
   }
-  letter_bag->remaining = 100;
+  letter_bag.remaining = 100;
 }
 
 void shuffle_bag() {
   for (int i = 99; i > 0; i--) {
     int j = rand() % (i + 1);
-    Entity temp = letter_bag->tiles[i];
-    letter_bag->tiles[i] = letter_bag->tiles[j];
-    letter_bag->tiles[j] = temp;
+    Entity temp = letter_bag.tiles[i];
+    letter_bag.tiles[i] = letter_bag.tiles[j];
+    letter_bag.tiles[j] = temp;
   }
 }
 
@@ -143,8 +148,21 @@ int main(int argc, char *argv[]) {
     //----------------------------------------------------------------------------------
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       Vector2 mouse_pos = GetMousePosition();
-      // printf("%d", mouse_pos.x);
-      // printf("%d", mouse_pos.y);
+
+      for (int i = 0; i < 16; i++) {
+        Entity *current_letter =
+            &letter_bag.tiles[letter_bag.remaining - i - 1];
+
+        if (mouse_pos.x >= current_letter->position.x &&
+            mouse_pos.x <= current_letter->position.x + current_letter->width &&
+            mouse_pos.y >= current_letter->position.y &&
+            mouse_pos.y <=
+                current_letter->position.y + current_letter->height) {
+
+          input[input_length++] = current_letter->tile_value;
+          printf("%s\n", input);
+        }
+      }
     }
     //----------------------------------------------------------------------------------
 
@@ -158,8 +176,7 @@ int main(int argc, char *argv[]) {
       uint8_t col = i % 4;
       uint8_t padding = 45;
 
-      Entity *current_letter =
-          &letter_bag->tiles[letter_bag->remaining - i - 1];
+      Entity *current_letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
       current_letter->width = 40;
       current_letter->height = 40;
       current_letter->position.x = col * padding;
@@ -169,6 +186,11 @@ int main(int argc, char *argv[]) {
       const char *letter = TextFormat("%c", current_letter->tile_value);
       DrawText(letter, current_letter->position.x, current_letter->position.y,
                30, BLACK);
+    }
+
+    for (int i = 0; i < input_length; i++) {
+      const char *letter = TextFormat("%c", input[i]);
+      DrawText(letter, 250 + i * 30, 20, 30, BLACK);
     }
 
     EndDrawing();
