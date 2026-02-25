@@ -143,23 +143,34 @@ int main(int argc, char *argv[]) {
   init_letter_bag();
   shuffle_bag();
 
+  bool draw_new_hand = true;
   while (!WindowShouldClose()) {
     // Update
     //----------------------------------------------------------------------------------
+
+    // draw hand
+    if (draw_new_hand) {
+      for (int i = 0; i < 16; i++) {
+        Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
+        letter->tile_location = HAND;
+      }
+      draw_new_hand = false;
+    }
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       Vector2 mouse_pos = GetMousePosition();
 
       for (int i = 0; i < 16; i++) {
-        Entity *current_letter =
-            &letter_bag.tiles[letter_bag.remaining - i - 1];
+        Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
 
-        if (mouse_pos.x >= current_letter->position.x &&
-            mouse_pos.x <= current_letter->position.x + current_letter->width &&
-            mouse_pos.y >= current_letter->position.y &&
-            mouse_pos.y <=
-                current_letter->position.y + current_letter->height) {
+        if (letter->tile_location == HAND &&
+            mouse_pos.x >= letter->position.x &&
+            mouse_pos.x <= letter->position.x + letter->width &&
+            mouse_pos.y >= letter->position.y &&
+            mouse_pos.y <= letter->position.y + letter->height) {
 
-          input[input_length++] = current_letter->tile_value;
+          letter->tile_location = IN_PLAY;
+          input[input_length++] = letter->tile_value;
           printf("%s\n", input);
         }
       }
@@ -192,6 +203,10 @@ int main(int argc, char *argv[]) {
       const char *letter = TextFormat("%c", input[i]);
       DrawText(letter, 250 + i * 30, 20, 30, BLACK);
     }
+
+    // submit button
+    DrawRectangle(400, 200, 140, 40, RED);
+    DrawText("Submit", 400, 200, 30, BLACK);
 
     EndDrawing();
     //----------------------------------------------------------------------------------
