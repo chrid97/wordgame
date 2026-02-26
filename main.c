@@ -44,7 +44,7 @@ int total_words = 0;
 LetterBag letter_bag = {0};
 
 // do we want to include null terminator?
-char input[10];
+uint8_t input[10]; // index to tile in letter bag
 int input_length = 0;
 //----------------------------------------------------------------------------------
 
@@ -160,8 +160,6 @@ int main(int argc, char *argv[]) {
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       Vector2 mouse_pos = GetMousePosition();
 
-      // box
-
       for (int i = 0; i < 16; i++) {
         Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
 
@@ -172,17 +170,23 @@ int main(int argc, char *argv[]) {
             mouse_pos.y <= letter->position.y + letter->height) {
 
           letter->tile_location = IN_PLAY;
-          input[input_length++] = letter->tile_value;
-          printf("%s\n", input);
+          input[input_length++] = letter_bag.remaining - i - 1;
         }
       }
 
       Rectangle mouse_box = {mouse_pos.x, mouse_pos.y, 0, 0};
       Rectangle button = {400, 200, 140, 40};
       char *word_pointer = words;
+
+      char submit_word[10] = {0};
+      for (int i = 0; i < input_length; i++) {
+        submit_word[i] = letter_bag.tiles[input[i]].tile_value;
+        printf("%c\n", submit_word[i]);
+      }
+
       if (CheckCollisionRecs(mouse_box, button)) {
         for (int i = 0; i < total_words; i++) {
-          int result = strcmp(input, word_pointer);
+          int result = strcmp(submit_word, word_pointer);
 
           if (result == 0) {
             printf("Match found\n");
@@ -201,25 +205,36 @@ int main(int argc, char *argv[]) {
     BeginDrawing();
     ClearBackground(ORANGE);
 
+    const uint8_t padding = 38;
+    const int board_width = 4 * padding;
+    const int board_height = 4 * padding;
+    const int half_width = VIRTUAL_WIDTH / 2;
+    const int half_height = VIRTUAL_HEIGHT / 2;
+    const int board_origin_x = half_width - (board_width / 2);
+    const int board_origin_y = half_width - board_height;
+
     for (int i = 0; i < 16; i++) {
       uint8_t row = i / 4;
       uint8_t col = i % 4;
-      uint8_t padding = 45;
+      Color color = WHITE;
 
-      Entity *current_letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
-      current_letter->width = 40;
-      current_letter->height = 40;
-      current_letter->position.x = col * padding;
-      current_letter->position.y = row * padding;
-      DrawRectangle(current_letter->position.x, current_letter->position.y,
-                    current_letter->width, current_letter->height, WHITE);
-      const char *letter = TextFormat("%c", current_letter->tile_value);
-      DrawText(letter, current_letter->position.x, current_letter->position.y,
-               30, BLACK);
+      Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
+      letter->width = 32;
+      letter->height = 32;
+      letter->position.x = col * padding + board_origin_x;
+      letter->position.y = row * padding + board_origin_y;
+      if (letter->tile_location == IN_PLAY) {
+        color = GRAY;
+      }
+      DrawRectangle(letter->position.x, letter->position.y, letter->width,
+                    letter->height, color);
+      const char *letter_text = TextFormat("%c", letter->tile_value);
+      DrawText(letter_text, letter->position.x, letter->position.y, 25, BLACK);
     }
 
     for (int i = 0; i < input_length; i++) {
-      const char *letter = TextFormat("%c", input[i]);
+      const char *letter =
+          TextFormat("%c", letter_bag.tiles[input[i]].tile_value);
       DrawText(letter, 250 + i * 30, 20, 30, BLACK);
     }
 
