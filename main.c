@@ -51,6 +51,23 @@ int input_length = 0;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
+#define LETTER_COUNT 26
+
+Texture2D letter_textures[LETTER_COUNT] = {0};
+
+void load_letter_textures(void) {
+  for (int i = 0; i < LETTER_COUNT; i++) {
+    char path[256];
+    snprintf(path, sizeof(path), "assets/letters/%c.png", 'a' + i);
+
+    letter_textures[i] = LoadTexture(path);
+
+    if (letter_textures[i].id == 0) {
+      TraceLog(LOG_ERROR, "Failed to load %s", path);
+    }
+  }
+}
+
 void init_letter_bag() {
   uint8_t letter_occurrence[26] = {
       8,  // a
@@ -134,9 +151,21 @@ void load_words() {
   fclose(file);
 }
 
+void draw_tile(Entity *letter, Texture2D tile, Color color) {
+  DrawTexture(tile, letter->position.x, letter->position.y, color);
+  DrawTexture(letter_textures[letter->tile_value - 'a'], letter->position.x,
+              letter->position.y, WHITE);
+}
+
 int main(int argc, char *argv[]) {
   InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
   SetTargetFPS(0);
+
+  load_letter_textures();
+  Texture2D tile = LoadTexture("assets/tile.png");
+  if (tile.id == 0) { // super basic failure check
+    TraceLog(LOG_ERROR, "Failed to load texture");
+  }
 
   load_words();
   srand(time(NULL));
@@ -226,16 +255,13 @@ int main(int argc, char *argv[]) {
       if (letter->tile_location == IN_PLAY) {
         color = GRAY;
       }
-      DrawRectangle(letter->position.x, letter->position.y, letter->width,
-                    letter->height, color);
-      const char *letter_text = TextFormat("%c", letter->tile_value);
-      DrawText(letter_text, letter->position.x, letter->position.y, 25, BLACK);
+      draw_tile(letter, tile, color);
     }
 
     for (int i = 0; i < input_length; i++) {
-      const char *letter =
-          TextFormat("%c", letter_bag.tiles[input[i]].tile_value);
-      DrawText(letter, 250 + i * 30, 20, 30, BLACK);
+      Entity *t = &letter_bag.tiles[input[i]];
+      t->position = (Vector2){250 + i * 38, 20};
+      draw_tile(t, tile, WHITE);
     }
 
     // submit button
