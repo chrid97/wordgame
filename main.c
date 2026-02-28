@@ -188,6 +188,7 @@ int main(int argc, char *argv[]) {
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       Vector2 mouse_pos = GetMousePosition();
+      Rectangle mouse_box = {mouse_pos.x, mouse_pos.y, 0, 0};
 
       for (int i = 0; i < 16; i++) {
         Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
@@ -203,7 +204,16 @@ int main(int argc, char *argv[]) {
         }
       }
 
-      Rectangle mouse_box = {mouse_pos.x, mouse_pos.y, 0, 0};
+      for (int i = 0; i < input_length; i++) {
+        Entity *letter = &letter_bag.tiles[input[i]];
+        
+        if(letter->tile_location == IN_PLAY && CheckCollisionRecs(mouse_box, (Rectangle){letter->position.x, letter->position.y, letter->width, letter->height})) {
+          letter->tile_location = HAND;
+          input[i] = 0;
+          input_length--;
+        }
+      }
+
       Rectangle button = {400, 200, 140, 40};
       char *word_pointer = words;
 
