@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 
 #define VIRTUAL_WIDTH 640
@@ -58,6 +57,7 @@ const int board_origin_y = half_width - board_height;
 // Rectangle hand = {board_origin_x, board_origin_y, board_width, board_height};
 #define BOARD_COUNT 16
 uint8_t board[BOARD_COUNT]; // index to tiles in bag
+uint8_t board_length;
 //----------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------
@@ -186,14 +186,16 @@ int main(int argc, char *argv[]) {
     // Update
     //----------------------------------------------------------------------------------
 
-    // draw hand
     if (draw_new_hand) {
       for (int i = 0; i < BOARD_COUNT; i++) {
         Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
         letter->tile_location = BOARD;
+        board[i] = letter_bag.remaining - i - 1;
+        board_length++;
       }
       draw_new_hand = false;
     }
+    assert(board_length != 0);
 
     for (int i = 0; i < letter_bag.remaining; i++) {
       Entity *tile = &letter_bag.tiles[i];
@@ -205,6 +207,10 @@ int main(int argc, char *argv[]) {
       case IN_PLAY: {
         tile->position.x = 0;
         tile->position.y = 0;
+      } break;
+      case BAG: {
+      } break;
+      case USED: {
       } break;
       }
     }
@@ -273,6 +279,7 @@ int main(int argc, char *argv[]) {
 
     for (int i = 0; i < BOARD_COUNT; i++) {
       Entity *tile = &letter_bag.tiles[board[i]];
+      assert(tile->tile_location == BOARD);
       draw_tile(tile, tile_texture, WHITE);
     }
 
