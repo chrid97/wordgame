@@ -13,7 +13,7 @@
 // Types
 //----------------------------------------------------------------------------------
 typedef enum { TILE } EntityType;
-typedef enum { BOARD, BAG, USED, IN_PLAY } TileLocation;
+// typedef enum { BOARD, BAG, USED, IN_PLAY } TileLocation;
 
 typedef struct {
   EntityType type;
@@ -22,7 +22,7 @@ typedef struct {
   int height;
 
   char tile_value;
-  TileLocation tile_location;
+  // TileLocation tile_location;
 } Entity;
 
 #define LETTER_BAG_SIZE 100
@@ -46,27 +46,20 @@ LetterBag letter_bag = {0};
 uint8_t input[10]; // index to tile in letter bag
 int input_length = 0;
 
-const uint8_t padding = 38;
-const int board_width = 4 * padding;
-const int board_height = 4 * padding;
-const int half_width = VIRTUAL_WIDTH / 2;
-const int half_height = VIRTUAL_HEIGHT / 2;
-const int board_origin_x = half_width - (board_width / 2);
-const int board_origin_y = half_width - board_height;
-
-// Rectangle hand = {board_origin_x, board_origin_y, board_width, board_height};
-#define BOARD_COUNT 16
+#define BOARD_COL 4
+#define BOARD_ROW 4
+#define BOARD_COUNT (BOARD_COL * BOARD_COL)
+#define TILE_SIZE 40
+#define TILE_NONE 0xFF      // Sentinel Value
 uint8_t board[BOARD_COUNT]; // index to tiles in bag
-uint8_t board_length;
+// uint8_t board_length;
+#define LETTER_COUNT 26
+Texture2D letter_textures[LETTER_COUNT] = {0};
 //----------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
-#define LETTER_COUNT 26
-
-Texture2D letter_textures[LETTER_COUNT] = {0};
-
 void load_letter_textures(void) {
   for (int i = 0; i < LETTER_COUNT; i++) {
     char path[256];
@@ -116,7 +109,7 @@ void init_letter_bag() {
     for (int j = 0; j < letter_occurrence[letter]; j++) {
       letter_bag.tiles[i++] = (Entity){
           .type = TILE,
-          .tile_location = BAG,
+          // .tile_location = BAG,
           .position = {},
           .height = 50,
           .width = 50,
@@ -185,35 +178,35 @@ int main(int argc, char *argv[]) {
   while (!WindowShouldClose()) {
     // Update
     //----------------------------------------------------------------------------------
-
     if (draw_new_hand) {
       for (int i = 0; i < BOARD_COUNT; i++) {
         Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
-        letter->tile_location = BOARD;
+        // letter->tile_location = BOARD;
         board[i] = letter_bag.remaining - i - 1;
-        board_length++;
+        // board_length++;
+        letter_bag.remaining--;
       }
       draw_new_hand = false;
     }
-    assert(board_length != 0);
+    // assert(board_length != 0);
 
-    for (int i = 0; i < letter_bag.remaining; i++) {
-      Entity *tile = &letter_bag.tiles[i];
-      switch (tile->tile_location) {
-      case BOARD: {
-        tile->position.x = 0;
-        tile->position.y = 0;
-      } break;
-      case IN_PLAY: {
-        tile->position.x = 0;
-        tile->position.y = 0;
-      } break;
-      case BAG: {
-      } break;
-      case USED: {
-      } break;
-      }
-    }
+    // for (int i = 0; i < letter_bag.remaining; i++) {
+    //   Entity *tile = &letter_bag.tiles[i];
+    //   switch (tile->tile_location) {
+    //   case BOARD: {
+    //     tile->position.x = 0;
+    //     tile->position.y = 0;
+    //   } break;
+    //   case IN_PLAY: {
+    //     tile->position.x = 0;
+    //     tile->position.y = 0;
+    //   } break;
+    //   case BAG: {
+    //   } break;
+    //   case USED: {
+    //   } break;
+    //   }
+    // }
 
     // if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
     //   Vector2 mouse_pos = GetMousePosition();
@@ -277,10 +270,24 @@ int main(int argc, char *argv[]) {
     BeginDrawing();
     ClearBackground(ORANGE);
 
+    const int padding = 10;
+    const int board_width = BOARD_ROW * (TILE_SIZE + padding);
+    const int board_height = BOARD_COL * (TILE_SIZE + padding);
+    const int board_origin_x = (VIRTUAL_WIDTH / 2) - board_width / 2;
+    const int board_origin_y = VIRTUAL_HEIGHT - board_height;
+
+    DrawRectangle(board_origin_x, board_origin_y, board_width, board_height,
+                  BROWN);
+
     for (int i = 0; i < BOARD_COUNT; i++) {
       Entity *tile = &letter_bag.tiles[board[i]];
-      assert(tile->tile_location == BOARD);
-      draw_tile(tile, tile_texture, WHITE);
+      // assert(tile->tile_location == BOARD);
+      // draw_tile(tile, tile_texture, WHITE);
+      uint8_t row = i / 4;
+      uint8_t col = i % 4;
+      DrawRectangle(board_origin_x + (col * (TILE_SIZE + padding)),
+                    board_origin_y + (row * (TILE_SIZE + padding)), TILE_SIZE,
+                    TILE_SIZE, RED);
     }
 
     // const uint8_t padding = 38;
