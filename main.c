@@ -9,53 +9,44 @@
 #define VIRTUAL_WIDTH 640
 #define VIRTUAL_HEIGHT 360
 
+#define LETTER_COUNT 26
+#define LETTER_BAG_SIZE 100
+#define BOARD_COL 4
+#define BOARD_ROW 4
+#define BOARD_COUNT (BOARD_COL * BOARD_ROW)
+#define TILE_SIZE 40
+#define TILE_NONE 0xFF // Sentinel Value
+#define MAX_CHAR_SELECTION 10
+
 //----------------------------------------------------------------------------------
 // Types
 //----------------------------------------------------------------------------------
 typedef enum { TILE } EntityType;
-// typedef enum { BOARD, BAG, USED, IN_PLAY } TileLocation;
-
 typedef struct {
   EntityType type;
   Vector2 position;
   int width;
   int height;
-
   char tile_value;
-  // TileLocation tile_location;
 } Entity;
 
-#define LETTER_BAG_SIZE 100
 typedef struct {
   Entity tiles[LETTER_BAG_SIZE];
-  // uint8_t *deck;     // pointer to tiles
-  uint8_t remaining; // tiles in the bag
-  uint8_t size;      // total number of tiles
+  uint8_t remaining;
+  uint8_t size; // total number of tiles
 } LetterBag;
-//----------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------
 // State
 //----------------------------------------------------------------------------------
 char *words;
 int total_words = 0;
-
 LetterBag letter_bag = {0};
-
 // do we want to include null terminator?
-uint8_t input[10]; // index to tile in letter bag
-int input_length = 0;
-
-#define BOARD_COL 4
-#define BOARD_ROW 4
-#define BOARD_COUNT (BOARD_COL * BOARD_COL)
-#define TILE_SIZE 40
-#define TILE_NONE 0xFF      // Sentinel Value
-uint8_t board[BOARD_COUNT]; // index to tiles in bag
-// uint8_t board_length;
-#define LETTER_COUNT 26
+uint8_t selection[MAX_CHAR_SELECTION]; // index to tile in letter bag
+int selection_length = 0;
+uint8_t board[BOARD_COUNT] = {TILE_NONE}; // index to tiles in bag
 Texture2D letter_textures[LETTER_COUNT] = {0};
-//----------------------------------------------------------------------------------
 
 //----------------------------------------------------------------------------------
 // Functions
@@ -156,12 +147,6 @@ void load_words() {
   fclose(file);
 }
 
-void draw_tile(Entity *letter, Texture2D tile, Color color) {
-  DrawTexture(tile, letter->position.x, letter->position.y, color);
-  DrawTexture(letter_textures[letter->tile_value - 'a'], letter->position.x,
-              letter->position.y, WHITE);
-}
-
 int main(int argc, char *argv[]) {
   InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
   SetTargetFPS(0);
@@ -174,160 +159,112 @@ int main(int argc, char *argv[]) {
   init_letter_bag();
   shuffle_bag();
 
-  bool draw_new_hand = true;
+  const int padding = 10;
+  const int board_width = BOARD_ROW * (TILE_SIZE + padding);
+  const int board_height = BOARD_COL * (TILE_SIZE + padding);
+  const float board_origin_x = (VIRTUAL_WIDTH / 2.0) - board_width / 2.0;
+  const float board_origin_y = VIRTUAL_HEIGHT - board_height;
+  const Rectangle board_rect = {board_origin_x, board_origin_y, board_width,
+                                board_height};
+  const int selection_origin_x = 100;
+  const int selection_origin_y = board_height - 200;
+
+  bool fill_board = true;
   while (!WindowShouldClose()) {
+    //----------------------------------------------------------------------------------
     // Update
     //----------------------------------------------------------------------------------
-    if (draw_new_hand) {
+    if (fill_board) {
       for (int i = 0; i < BOARD_COUNT; i++) {
         Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
-        // letter->tile_location = BOARD;
         board[i] = letter_bag.remaining - i - 1;
-        // board_length++;
         letter_bag.remaining--;
       }
-      draw_new_hand = false;
+      fill_board = false;
     }
-    // assert(board_length != 0);
 
-    // for (int i = 0; i < letter_bag.remaining; i++) {
-    //   Entity *tile = &letter_bag.tiles[i];
-    //   switch (tile->tile_location) {
-    //   case BOARD: {
-    //     tile->position.x = 0;
-    //     tile->position.y = 0;
-    //   } break;
-    //   case IN_PLAY: {
-    //     tile->position.x = 0;
-    //     tile->position.y = 0;
-    //   } break;
-    //   case BAG: {
-    //   } break;
-    //   case USED: {
-    //   } break;
-    //   }
-    // }
+    // Maybe store most recent mouse_pos then i can get rid of this statement
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      Vector2 mouse_pos = GetMousePosition();
 
-    // if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    //   Vector2 mouse_pos = GetMousePosition();
-    //   Rectangle mouse_box = {mouse_pos.x, mouse_pos.y, 0, 0};
-    //
-    //   for (int i = 0; i < 16; i++) {
-    //     Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
-    //
-    //     if (letter->tile_location == BOARD &&
-    //         mouse_pos.x >= letter->position.x &&
-    //         mouse_pos.x <= letter->position.x + letter->width &&
-    //         mouse_pos.y >= letter->position.y &&
-    //         mouse_pos.y <= letter->position.y + letter->height) {
-    //
-    //       letter->tile_location = IN_PLAY;
-    //       input[input_length++] = letter_bag.remaining - i - 1;
-    //     }
-    //   }
-    //
-    //   for (int i = 0; i < input_length; i++) {
-    //     Entity *letter = &letter_bag.tiles[input[i]];
-    //
-    //     if (letter->tile_location == IN_PLAY &&
-    //         CheckCollisionRecs(
-    //             mouse_box, (Rectangle){letter->position.x,
-    //             letter->position.y,
-    //                                    letter->width, letter->height})) {
-    //       letter->tile_location = BOARD;
-    //       input[i] = 0;
-    //       input_length--;
-    //     }
-    //   }
-    //
-    //   Rectangle button = {400, 200, 140, 40};
-    //   char *word_pointer = words;
-    //
-    //   char submit_word[10] = {0};
-    //   for (int i = 0; i < input_length; i++) {
-    //     submit_word[i] = letter_bag.tiles[input[i]].tile_value;
-    //     printf("%c\n", submit_word[i]);
-    //   }
-    //
-    //   if (CheckCollisionRecs(mouse_box, button)) {
-    //     for (int i = 0; i < total_words; i++) {
-    //       int result = strcmp(submit_word, word_pointer);
-    //
-    //       if (result == 0) {
-    //         printf("Match found\n");
-    //         break;
-    //       }
-    //       word_pointer += strlen(word_pointer) + 1;
-    //     }
-    //
-    //     printf("Match not found\n");
-    //   }
-    // }
+      // If click on board
+      if (selection_length < MAX_CHAR_SELECTION &&
+          CheckCollisionPointRec(mouse_pos, board_rect)) {
+        for (int i = 0; i < BOARD_COUNT; i++) {
+          const uint8_t row = i / 4;
+          const uint8_t col = i % 4;
+          const int x = board_origin_x + (col * (TILE_SIZE + padding));
+          const int y = board_origin_y + (row * (TILE_SIZE + padding));
+
+          if (CheckCollisionPointRec(mouse_pos,
+                                     (Rectangle){x, y, TILE_SIZE, TILE_SIZE})) {
+            const uint8_t cell = col + (row * BOARD_COL);
+            printf("Selected tile %c in (%i, %i) \n",
+                   letter_bag.tiles[board[cell]].tile_value, col, row);
+
+            bool already_chosen = false;
+            for (int i = 0; i < selection_length; i++) {
+              if (board[cell] == selection[i]) {
+                already_chosen = true;
+                printf("Tile already chosen\n");
+              }
+            }
+            if (!already_chosen) {
+              selection[selection_length++] = board[cell];
+            }
+          }
+        }
+      }
+
+      if (CheckCollisionPointRec(
+              mouse_pos, (Rectangle){selection_origin_x, selection_origin_y,
+                                     (TILE_SIZE + padding) * selection_length,
+                                     TILE_SIZE})) {
+        printf("clicked\n");
+      }
+    }
+
     //----------------------------------------------------------------------------------
-
     // Draw
     //----------------------------------------------------------------------------------
     BeginDrawing();
     ClearBackground(ORANGE);
-
-    const int padding = 10;
-    const int board_width = BOARD_ROW * (TILE_SIZE + padding);
-    const int board_height = BOARD_COL * (TILE_SIZE + padding);
-    const int board_origin_x = (VIRTUAL_WIDTH / 2) - board_width / 2;
-    const int board_origin_y = VIRTUAL_HEIGHT - board_height;
 
     DrawRectangle(board_origin_x, board_origin_y, board_width, board_height,
                   BROWN);
 
     for (int i = 0; i < BOARD_COUNT; i++) {
       Entity *tile = &letter_bag.tiles[board[i]];
-      // assert(tile->tile_location == BOARD);
-      // draw_tile(tile, tile_texture, WHITE);
-      uint8_t row = i / 4;
-      uint8_t col = i % 4;
-      DrawRectangle(board_origin_x + (col * (TILE_SIZE + padding)),
-                    board_origin_y + (row * (TILE_SIZE + padding)), TILE_SIZE,
-                    TILE_SIZE, RED);
+      const uint8_t row = i / 4;
+      const uint8_t col = i % 4;
+      const int x = board_origin_x + (col * (TILE_SIZE + padding));
+      const int y = board_origin_y + (row * (TILE_SIZE + padding));
+      DrawRectangle(x, y, TILE_SIZE, TILE_SIZE, RED);
+      // DrawTexture(tile_texture, x, y, WHITE);
+      bool already_chosen = false;
+      for (int j = 0; j < selection_length; j++) {
+        if (board[i] == selection[j]) {
+          already_chosen = true;
+        }
+      }
+      const Color color = already_chosen ? GRAY : WHITE;
+      DrawTextureEx(tile_texture, (Vector2){x, y}, 0, 1.3, color);
+      DrawTexture(letter_textures[tile->tile_value - 'a'], x, y, WHITE);
     }
 
-    // const uint8_t padding = 38;
-    // const int board_width = 4 * padding;
-    // const int board_height = 4 * padding;
-    // const int half_width = VIRTUAL_WIDTH / 2;
-    // const int half_height = VIRTUAL_HEIGHT / 2;
-    // const int board_origin_x = half_width - (board_width / 2);
-    // const int board_origin_y = half_width - board_height;
-    //
-    // for (int i = 0; i < 16; i++) {
-    //   uint8_t row = i / 4;
-    //   uint8_t col = i % 4;
-    //   Color color = WHITE;
-    //
-    //   Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
-    //   letter->width = 32;
-    //   letter->height = 32;
-    //   letter->position.x = col * padding + board_origin_x;
-    //   letter->position.y = row * padding + board_origin_y;
-    //   if (letter->tile_location == IN_PLAY) {
-    //     color = GRAY;
-    //   }
-    //   draw_tile(letter, tile, color);
-    // }
-    //
-    // for (int i = 0; i < input_length; i++) {
-    //   Entity *t = &letter_bag.tiles[input[i]];
-    //   t->position = (Vector2){250 + i * 38, 20};
-    //   draw_tile(t, tile, WHITE);
-    // }
-    //
-    // // submit button
-    // DrawRectangle(400, 200, 140, 40, RED);
-    // DrawText("Submit", 400, 200, 30, BLACK);
+    for (int i = 0; i < selection_length; i++) {
+      Entity *tile = &letter_bag.tiles[selection[i]];
+      const int x = selection_origin_x + (i * (TILE_SIZE + padding));
+      DrawTextureEx(tile_texture, (Vector2){x, selection_origin_y}, 0, 1.3,
+                    WHITE);
+      DrawTexture(letter_textures[tile->tile_value - 'a'], x,
+                  selection_origin_y, WHITE);
+    }
 
     EndDrawing();
-    //----------------------------------------------------------------------------------
   }
 
+  //----------------------------------------------------------------------------------
   // De-Initialization
   //--------------------------------------------------------------------------------------
   CloseWindow(); // Close window and OpenGL context
