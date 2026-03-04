@@ -220,7 +220,12 @@ int main(int argc, char *argv[]) {
               mouse_pos, (Rectangle){selection_origin_x, selection_origin_y,
                                      (TILE_SIZE + padding) * selection_length,
                                      TILE_SIZE})) {
-        printf("clicked\n");
+        const float relative_x = mouse_pos.x - selection_origin_x;
+        const int cell = relative_x / (TILE_SIZE + padding);
+        printf("Selected chosen tile %c\n",
+               letter_bag.tiles[selection[cell]].tile_value);
+
+        selection_length = selection_length - (selection_length - cell);
       }
     }
 
