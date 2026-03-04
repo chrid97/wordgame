@@ -47,7 +47,21 @@ uint8_t selection[MAX_CHAR_SELECTION]; // index to tile in letter bag
 int selection_length = 0;
 uint8_t board[BOARD_COUNT] = {TILE_NONE}; // index to tiles in bag
 Texture2D letter_textures[LETTER_COUNT] = {0};
+bool valid_word = false;
 
+// UI
+const int padding = 10;
+const int board_width = BOARD_ROW * (TILE_SIZE + padding);
+const int board_height = BOARD_COL * (TILE_SIZE + padding);
+const float board_origin_x = (VIRTUAL_WIDTH / 2.0) - board_width / 2.0;
+const float board_origin_y = VIRTUAL_HEIGHT - board_height;
+const Rectangle board_rect = {board_origin_x, board_origin_y, board_width,
+                              board_height};
+const int selection_origin_x = 100;
+const int selection_origin_y = board_height - 200;
+Vector2 submit_button_pos = {board_origin_x + board_width + 25,
+                             VIRTUAL_HEIGHT - 25};
+float submit_button_radius = 20;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
@@ -159,16 +173,6 @@ int main(int argc, char *argv[]) {
   init_letter_bag();
   shuffle_bag();
 
-  const int padding = 10;
-  const int board_width = BOARD_ROW * (TILE_SIZE + padding);
-  const int board_height = BOARD_COL * (TILE_SIZE + padding);
-  const float board_origin_x = (VIRTUAL_WIDTH / 2.0) - board_width / 2.0;
-  const float board_origin_y = VIRTUAL_HEIGHT - board_height;
-  const Rectangle board_rect = {board_origin_x, board_origin_y, board_width,
-                                board_height};
-  const int selection_origin_x = 100;
-  const int selection_origin_y = board_height - 200;
-
   bool fill_board = true;
   while (!WindowShouldClose()) {
     //----------------------------------------------------------------------------------
@@ -265,6 +269,13 @@ int main(int argc, char *argv[]) {
       DrawTexture(letter_textures[tile->tile_value - 'a'], x,
                   selection_origin_y, WHITE);
     }
+
+    // Word Submit Button
+    DrawCircleV(submit_button_pos, submit_button_radius,
+                valid_word ? GREEN : GRAY);
+    DrawText("Submit", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
+             BLACK);
+    DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
 
     EndDrawing();
   }
