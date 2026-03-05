@@ -1,2 +1,16 @@
 build
 .cache
+
+# --- raylib build artifacts ---
+# (TODO) maybe figure out a different solution for this later
+lib/raylib/src/*.o
+lib/raylib/src/*.a
+lib/raylib/src/*.so*
+lib/raylib/src/*.web.a
+lib/raylib/src/*.wasm
+lib/raylib/src/*.js
+lib/raylib/src/*.html
+lib/raylib/src/*.data
+lib/raylib/src/*-protocol.h
+lib/raylib/src/*-protocol-code.h
+lib/raylib/src/raygui.c

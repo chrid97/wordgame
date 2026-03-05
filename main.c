@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef PLATFORM_WEB
+#include <emscripten/emscripten.h>
+#endif
 
 #define VIRTUAL_WIDTH 640
 #define VIRTUAL_HEIGHT 360
@@ -52,9 +55,14 @@ char selected_word[MAX_CHAR_SELECTION + 1] = {0}; // actual word
 uint8_t board[BOARD_COUNT] = {TILE_NONE};         // index to tiles in bag
 uint8_t selected_cells[MAX_CHAR_SELECTION] = {0}; // Selected board index
 
-Texture2D letter_textures[LETTER_COUNT] = {0};
 bool is_selected[LETTER_BAG_SIZE] = {0};
 bool valid_word = false;
+
+char **word_pointers;
+char *current_word;
+
+Texture2D tile_texture;
+Texture2D letter_textures[LETTER_COUNT] = {0};
 
 // UI
 const uint8_t padding = 10;
@@ -188,16 +196,136 @@ void load_words() {
   fclose(file);
 }
 
+void update_draw(void) {
+  //----------------------------------------------------------------------------------
+  // Update
+  //----------------------------------------------------------------------------------
+  if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+    // i wonder if this goto is sus
+    goto draw;
+  }
+
+  Vector2 mouse_pos = GetMousePosition();
+  if (selection_length < MAX_CHAR_SELECTION &&
+      CheckCollisionPointRec(mouse_pos, board_rect)) {
+    const float relative_x = (mouse_pos.x - board_origin_x);
+    const float relative_y = (mouse_pos.y - board_origin_y);
+
+    const uint8_t col = relative_x / pitch;
+    const uint8_t row = relative_y / pitch;
+    const uint8_t cell = col + (row * BOARD_COL);
+
+    printf("[click] cell=%u row=%u col=%u tile='%c' (idx=%u)\n", cell, row, col,
+           letter_bag.tiles[board[cell]].tile_value, board[cell]);
+
+    uint8_t tile_idx = board[cell];
+    if (!is_selected[tile_idx]) {
+      selection[selection_length] = tile_idx;
+      is_selected[tile_idx] = true;
+
+      selected_word[selection_length] = letter_bag.tiles[tile_idx].tile_value;
+      selected_word[selection_length + 1] = '\0';
+      selected_cells[selection_length] = cell;
+
+      selection_length++;
+    } else {
+      printf("Tile already selected\n");
+    }
+
+    // (TODO) only binary search when we select an unselected tile
+    valid_word = binary_search_word(word_pointers, selected_word, total_words);
+    printf("Current word: %s\n", selected_word);
+  }
+
+  if (CheckCollisionPointRec(
+          mouse_pos,
+          (Rectangle){selection_origin_x, selection_origin_y,
+                      (TILE_SIZE + padding) * selection_length, TILE_SIZE})) {
+    const float relative_x = mouse_pos.x - selection_origin_x;
+    const int cell = relative_x / (TILE_SIZE + padding);
+    printf("[click] Deselect tile %c\n",
+           letter_bag.tiles[selection[cell]].tile_value);
+
+    // Set selected tiles to false
+    for (int i = cell; i < selection_length; i++) {
+      is_selected[selection[i]] = false;
+    }
+    selection_length = cell;
+    selected_word[selection_length] = '\0';
+
+    // (TODO) only binary search if selection_length > 0
+    valid_word = binary_search_word(word_pointers, selected_word, total_words);
+    printf("Current word: %s\n", selected_word);
+  }
+
+  if (valid_word && CheckCollisionPointCircle(mouse_pos, submit_button_pos,
+                                              submit_button_radius)) {
+    printf("Submitted word %s!\n", selected_word);
+    for (int i = 0; i < selection_length; i++) {
+      uint8_t cell = selected_cells[i];
+      board[cell] = letter_bag.remaining;
+      is_selected[selection[i]] = false;
+      letter_bag.remaining--;
+      printf("Refilled bag with tile %c\n",
+             letter_bag.tiles[letter_bag.remaining].tile_value);
+    };
+    selection_length = 0;
+    selected_word[0] = '\0';
+  }
+
+  //----------------------------------------------------------------------------------
+  // Draw
+  //----------------------------------------------------------------------------------
+draw:
+  BeginDrawing();
+  ClearBackground(ORANGE);
+
+  DrawRectangle(board_origin_x, board_origin_y, board_width, board_height,
+                BROWN);
+
+  for (int i = 0; i < BOARD_COUNT; i++) {
+    Entity *tile = &letter_bag.tiles[board[i]];
+    const uint8_t row = i / 4;
+    const uint8_t col = i % 4;
+    const int x = board_origin_x + (col * (TILE_SIZE + padding));
+    const int y = board_origin_y + (row * (TILE_SIZE + padding));
+    DrawRectangle(x, y, TILE_SIZE, TILE_SIZE, RED);
+
+    const Color tint = is_selected[board[i]] ? GRAY : WHITE;
+    DrawTextureEx(tile_texture, (Vector2){x, y}, 0, 1.3, tint);
+    DrawTexture(letter_textures[tile->tile_value - 'a'], x, y, WHITE);
+  }
+
+  for (int i = 0; i < selection_length; i++) {
+    Entity *tile = &letter_bag.tiles[selection[i]];
+    const int x = selection_origin_x + (i * (TILE_SIZE + padding));
+    DrawTextureEx(tile_texture, (Vector2){x, selection_origin_y}, 0, 1.3,
+                  WHITE);
+    // (TODO) Center word
+    DrawTexture(letter_textures[tile->tile_value - 'a'], x, selection_origin_y,
+                WHITE);
+  }
+
+  // Word Submit Button
+  DrawCircleV(submit_button_pos, submit_button_radius,
+              valid_word ? GREEN : GRAY);
+  DrawText("Submit", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
+           BLACK);
+  DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
+
+  EndDrawing();
+}
+
 int main(int argc, char *argv[]) {
   InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
   SetTargetFPS(0);
 
   load_letter_textures();
-  Texture2D tile_texture = LoadTexture("assets/tile.png");
+  tile_texture = LoadTexture("assets/tile.png");
 
   load_words();
-  char **word_pointers = malloc(total_words * sizeof(char *));
-  char *current_word = words;
+  word_pointers = malloc(total_words * sizeof(char *));
+  current_word = words;
   for (int i = 0; i < total_words; i++) {
     word_pointers[i] = current_word;
     current_word += strlen(current_word) + 1;
@@ -211,126 +339,13 @@ int main(int argc, char *argv[]) {
     board[i] = letter_bag.remaining;
     letter_bag.remaining--;
   }
+#ifdef PLATFORM_WEB
+  emscripten_set_main_loop(update_draw, 0, 1);
+#else
   while (!WindowShouldClose()) {
-    //----------------------------------------------------------------------------------
-    // Update
-    //----------------------------------------------------------------------------------
-    if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-      // i wonder if this goto is sus
-      goto draw;
-    }
-
-    Vector2 mouse_pos = GetMousePosition();
-    if (selection_length < MAX_CHAR_SELECTION &&
-        CheckCollisionPointRec(mouse_pos, board_rect)) {
-      const float relative_x = (mouse_pos.x - board_origin_x);
-      const float relative_y = (mouse_pos.y - board_origin_y);
-
-      const uint8_t col = relative_x / pitch;
-      const uint8_t row = relative_y / pitch;
-      const uint8_t cell = col + (row * BOARD_COL);
-
-      printf("[click] cell=%u row=%u col=%u tile='%c' (idx=%u)\n", cell, row,
-             col, letter_bag.tiles[board[cell]].tile_value, board[cell]);
-
-      uint8_t tile_idx = board[cell];
-      if (!is_selected[tile_idx]) {
-        selection[selection_length] = tile_idx;
-        is_selected[tile_idx] = true;
-
-        selected_word[selection_length] = letter_bag.tiles[tile_idx].tile_value;
-        selected_word[selection_length + 1] = '\0';
-        selected_cells[selection_length] = cell;
-
-        selection_length++;
-      } else {
-        printf("Tile already selected\n");
-      }
-
-      // (TODO) only binary search when we select an unselected tile
-      valid_word =
-          binary_search_word(word_pointers, selected_word, total_words);
-      printf("Current word: %s\n", selected_word);
-    }
-
-    if (CheckCollisionPointRec(
-            mouse_pos,
-            (Rectangle){selection_origin_x, selection_origin_y,
-                        (TILE_SIZE + padding) * selection_length, TILE_SIZE})) {
-      const float relative_x = mouse_pos.x - selection_origin_x;
-      const int cell = relative_x / (TILE_SIZE + padding);
-      printf("[click] Deselect tile %c\n",
-             letter_bag.tiles[selection[cell]].tile_value);
-
-      // Set selected tiles to false
-      for (int i = cell; i < selection_length; i++) {
-        is_selected[selection[i]] = false;
-      }
-      selection_length = cell;
-      selected_word[selection_length] = '\0';
-
-      // (TODO) only binary search if selection_length > 0
-      valid_word =
-          binary_search_word(word_pointers, selected_word, total_words);
-      printf("Current word: %s\n", selected_word);
-    }
-
-    if (valid_word && CheckCollisionPointCircle(mouse_pos, submit_button_pos,
-                                                submit_button_radius)) {
-      printf("Submitted word %s!\n", selected_word);
-      for (int i = 0; i < selection_length; i++) {
-        uint8_t cell = selected_cells[i];
-        board[cell] = letter_bag.remaining;
-        is_selected[selection[i]] = false;
-        letter_bag.remaining--;
-        printf("Refilled bag with tile %c\n",
-               letter_bag.tiles[letter_bag.remaining].tile_value);
-      };
-      selection_length = 0;
-      selected_word[0] = '\0';
-    }
-
-    //----------------------------------------------------------------------------------
-    // Draw
-    //----------------------------------------------------------------------------------
-  draw:
-    BeginDrawing();
-    ClearBackground(ORANGE);
-
-    DrawRectangle(board_origin_x, board_origin_y, board_width, board_height,
-                  BROWN);
-
-    for (int i = 0; i < BOARD_COUNT; i++) {
-      Entity *tile = &letter_bag.tiles[board[i]];
-      const uint8_t row = i / 4;
-      const uint8_t col = i % 4;
-      const int x = board_origin_x + (col * (TILE_SIZE + padding));
-      const int y = board_origin_y + (row * (TILE_SIZE + padding));
-      DrawRectangle(x, y, TILE_SIZE, TILE_SIZE, RED);
-
-      const Color tint = is_selected[board[i]] ? GRAY : WHITE;
-      DrawTextureEx(tile_texture, (Vector2){x, y}, 0, 1.3, tint);
-      DrawTexture(letter_textures[tile->tile_value - 'a'], x, y, WHITE);
-    }
-
-    for (int i = 0; i < selection_length; i++) {
-      Entity *tile = &letter_bag.tiles[selection[i]];
-      const int x = selection_origin_x + (i * (TILE_SIZE + padding));
-      DrawTextureEx(tile_texture, (Vector2){x, selection_origin_y}, 0, 1.3,
-                    WHITE);
-      DrawTexture(letter_textures[tile->tile_value - 'a'], x,
-                  selection_origin_y, WHITE);
-    }
-
-    // Word Submit Button
-    DrawCircleV(submit_button_pos, submit_button_radius,
-                valid_word ? GREEN : GRAY);
-    DrawText("Submit", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
-             BLACK);
-    DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
-
-    EndDrawing();
+    update_draw();
   }
+#endif
 
   //----------------------------------------------------------------------------------
   // De-Initialization
