@@ -44,12 +44,14 @@ char *words;
 int total_words = 0;
 LetterBag letter_bag = {0};
 
-uint8_t selection[MAX_CHAR_SELECTION]; // index to tile in letter bag
+uint8_t selection[MAX_CHAR_SELECTION] = {0}; // index to tile in letter bag
 uint8_t selection_length = 0;
 
 char selected_word[MAX_CHAR_SELECTION + 1] = {0}; // actual word
 
-uint8_t board[BOARD_COUNT] = {TILE_NONE}; // index to tiles in bag
+uint8_t board[BOARD_COUNT] = {TILE_NONE};         // index to tiles in bag
+uint8_t selected_cells[MAX_CHAR_SELECTION] = {0}; // Selected board index
+
 Texture2D letter_textures[LETTER_COUNT] = {0};
 bool is_selected[LETTER_BAG_SIZE] = {0};
 bool valid_word = false;
@@ -146,9 +148,10 @@ void init_letter_bag() {
       };
     }
   }
-  letter_bag.remaining = 100;
+  letter_bag.remaining = 99;
 }
 
+// update this to go up to remaining tiles
 void shuffle_bag() {
   for (int i = 99; i > 0; i--) {
     int j = rand() % (i + 1);
@@ -198,7 +201,6 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < total_words; i++) {
     word_pointers[i] = current_word;
     current_word += strlen(current_word) + 1;
-    // printf("%s\n", word_pointers[i]);
   }
 
   srand(time(NULL));
@@ -206,14 +208,13 @@ int main(int argc, char *argv[]) {
   shuffle_bag();
 
   for (int i = 0; i < BOARD_COUNT; i++) {
-    board[i] = letter_bag.remaining - 1;
+    board[i] = letter_bag.remaining;
     letter_bag.remaining--;
   }
   while (!WindowShouldClose()) {
     //----------------------------------------------------------------------------------
     // Update
     //----------------------------------------------------------------------------------
-
     if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       // i wonder if this goto is sus
       goto draw;
@@ -239,12 +240,14 @@ int main(int argc, char *argv[]) {
 
         selected_word[selection_length] = letter_bag.tiles[tile_idx].tile_value;
         selected_word[selection_length + 1] = '\0';
+        selected_cells[selection_length] = cell;
 
         selection_length++;
       } else {
         printf("Tile already selected\n");
       }
 
+      // (TODO) only binary search when we select an unselected tile
       valid_word =
           binary_search_word(word_pointers, selected_word, total_words);
       printf("Current word: %s\n", selected_word);
@@ -266,6 +269,7 @@ int main(int argc, char *argv[]) {
       selection_length = cell;
       selected_word[selection_length] = '\0';
 
+      // (TODO) only binary search if selection_length > 0
       valid_word =
           binary_search_word(word_pointers, selected_word, total_words);
       printf("Current word: %s\n", selected_word);
@@ -274,6 +278,16 @@ int main(int argc, char *argv[]) {
     if (valid_word && CheckCollisionPointCircle(mouse_pos, submit_button_pos,
                                                 submit_button_radius)) {
       printf("Submitted word %s!\n", selected_word);
+      for (int i = 0; i < selection_length; i++) {
+        uint8_t cell = selected_cells[i];
+        board[cell] = letter_bag.remaining;
+        is_selected[selection[i]] = false;
+        letter_bag.remaining--;
+        printf("Refilled bag with tile %c\n",
+               letter_bag.tiles[letter_bag.remaining].tile_value);
+      };
+      selection_length = 0;
+      selected_word[0] = '\0';
     }
 
     //----------------------------------------------------------------------------------
