@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 #define VIRTUAL_WIDTH 640
@@ -47,18 +48,20 @@ uint8_t selection[MAX_CHAR_SELECTION]; // index to tile in letter bag
 int selection_length = 0;
 uint8_t board[BOARD_COUNT] = {TILE_NONE}; // index to tiles in bag
 Texture2D letter_textures[LETTER_COUNT] = {0};
+bool is_selected[LETTER_BAG_SIZE] = {0};
 bool valid_word = false;
 
 // UI
-const int padding = 10;
+const uint8_t padding = 10;
+const uint8_t pitch = TILE_SIZE + padding;
 const int board_width = BOARD_ROW * (TILE_SIZE + padding);
 const int board_height = BOARD_COL * (TILE_SIZE + padding);
 const float board_origin_x = (VIRTUAL_WIDTH / 2.0) - board_width / 2.0;
 const float board_origin_y = VIRTUAL_HEIGHT - board_height;
 const Rectangle board_rect = {board_origin_x, board_origin_y, board_width,
                               board_height};
-const int selection_origin_x = 100;
-const int selection_origin_y = board_height - 200;
+const float selection_origin_x = 100;
+const float selection_origin_y = board_height - 200;
 Vector2 submit_button_pos = {board_origin_x + board_width + 25,
                              VIRTUAL_HEIGHT - 25};
 float submit_button_radius = 20;
@@ -187,55 +190,74 @@ int main(int argc, char *argv[]) {
       fill_board = false;
     }
 
-    // Maybe store most recent mouse_pos then i can get rid of this statement
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-      Vector2 mouse_pos = GetMousePosition();
+    if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+      // i wonder if this goto is sus
+      goto draw;
+    }
 
-      // If click on board
-      if (selection_length < MAX_CHAR_SELECTION &&
-          CheckCollisionPointRec(mouse_pos, board_rect)) {
-        for (int i = 0; i < BOARD_COUNT; i++) {
-          const uint8_t row = i / 4;
-          const uint8_t col = i % 4;
-          const int x = board_origin_x + (col * (TILE_SIZE + padding));
-          const int y = board_origin_y + (row * (TILE_SIZE + padding));
+    Vector2 mouse_pos = GetMousePosition();
+    if (selection_length < MAX_CHAR_SELECTION &&
+        CheckCollisionPointRec(mouse_pos, board_rect)) {
+      const float relative_x = (mouse_pos.x - board_origin_x);
+      const float relative_y = (mouse_pos.y - board_origin_y);
 
-          if (CheckCollisionPointRec(mouse_pos,
-                                     (Rectangle){x, y, TILE_SIZE, TILE_SIZE})) {
-            const uint8_t cell = col + (row * BOARD_COL);
-            printf("Selected tile %c in (%i, %i) \n",
-                   letter_bag.tiles[board[cell]].tile_value, col, row);
+      const uint8_t col = relative_x / pitch;
+      const uint8_t row = relative_y / pitch;
+      const uint8_t cell = col + (row * BOARD_COL);
 
-            bool already_chosen = false;
-            for (int i = 0; i < selection_length; i++) {
-              if (board[cell] == selection[i]) {
-                already_chosen = true;
-                printf("Tile already chosen\n");
-              }
-            }
-            if (!already_chosen) {
-              selection[selection_length++] = board[cell];
-            }
-          }
-        }
+      printf("[click] cell=%u row=%u col=%u tile='%c' (idx=%u)\n", cell, row,
+             col, letter_bag.tiles[board[cell]].tile_value, board[cell]);
+
+      if (!is_selected[board[cell]]) {
+        selection[selection_length++] = board[cell];
+        is_selected[board[cell]] = true;
+      } else {
+        printf("Tile already selected\n");
       }
 
-      if (CheckCollisionPointRec(
-              mouse_pos, (Rectangle){selection_origin_x, selection_origin_y,
-                                     (TILE_SIZE + padding) * selection_length,
-                                     TILE_SIZE})) {
-        const float relative_x = mouse_pos.x - selection_origin_x;
-        const int cell = relative_x / (TILE_SIZE + padding);
-        printf("Selected chosen tile %c\n",
-               letter_bag.tiles[selection[cell]].tile_value);
+      // char *word_pointer = words;
+      // char selected_word[MAX_CHAR_SELECTION + 1] = {0};
+      // for (int i = 0; i < selection_length; i++) {
+      //   selected_word[i] = letter_bag.tiles[selection[i]].tile_value;
+      // }
+      // selected_word[selection_length] = '\0';
+      //
+      // for (int i = 0; i < total_words; i++) {
+      //   int result = strcmp(selected_word, word_pointer);
+      //
+      //   if (result == 0) {
+      //     printf("Match found!\n");
+      //     valid_word = true;
+      //     break;
+      //   } else {
+      //     valid_word = false;
+      //     printf("Match not found :(\n");
+      //     printf("%s != %s\n", selected_word, word_pointer);
+      //   }
+      //   word_pointer += strlen(word_pointer) + 1;
+      // }
+    }
 
-        selection_length = selection_length - (selection_length - cell);
+    if (CheckCollisionPointRec(
+            mouse_pos,
+            (Rectangle){selection_origin_x, selection_origin_y,
+                        (TILE_SIZE + padding) * selection_length, TILE_SIZE})) {
+      const float relative_x = mouse_pos.x - selection_origin_x;
+      const int cell = relative_x / (TILE_SIZE + padding);
+      printf("[click] Deselect tile %c\n",
+             letter_bag.tiles[selection[cell]].tile_value);
+
+      // Set selected tiles to false
+      for (int i = cell; i < selection_length; i++) {
+        is_selected[selection[i]] = false;
       }
+      selection_length = cell;
     }
 
     //----------------------------------------------------------------------------------
     // Draw
     //----------------------------------------------------------------------------------
+  draw:
     BeginDrawing();
     ClearBackground(ORANGE);
 
@@ -249,15 +271,9 @@ int main(int argc, char *argv[]) {
       const int x = board_origin_x + (col * (TILE_SIZE + padding));
       const int y = board_origin_y + (row * (TILE_SIZE + padding));
       DrawRectangle(x, y, TILE_SIZE, TILE_SIZE, RED);
-      // DrawTexture(tile_texture, x, y, WHITE);
-      bool already_chosen = false;
-      for (int j = 0; j < selection_length; j++) {
-        if (board[i] == selection[j]) {
-          already_chosen = true;
-        }
-      }
-      const Color color = already_chosen ? GRAY : WHITE;
-      DrawTextureEx(tile_texture, (Vector2){x, y}, 0, 1.3, color);
+
+      const Color tint = is_selected[board[i]] ? GRAY : WHITE;
+      DrawTextureEx(tile_texture, (Vector2){x, y}, 0, 1.3, tint);
       DrawTexture(letter_textures[tile->tile_value - 'a'], x, y, WHITE);
     }
 
