@@ -43,9 +43,12 @@ typedef struct {
 char *words;
 int total_words = 0;
 LetterBag letter_bag = {0};
-// do we want to include null terminator?
+
 uint8_t selection[MAX_CHAR_SELECTION]; // index to tile in letter bag
-int selection_length = 0;
+uint8_t selection_length = 0;
+
+char selected_word[MAX_CHAR_SELECTION + 1] = {0}; // actual word
+
 uint8_t board[BOARD_COUNT] = {TILE_NONE}; // index to tiles in bag
 Texture2D letter_textures[LETTER_COUNT] = {0};
 bool is_selected[LETTER_BAG_SIZE] = {0};
@@ -68,6 +71,27 @@ float submit_button_radius = 20;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
+bool binary_search_word(char **words, const char *target, int count) {
+  int high = count - 1;
+  int low = 0;
+  while (low <= high) {
+    int mid = (low + high) / 2;
+
+    int result = strcmp(target, words[mid]);
+    if (result == 0) {
+      return true;
+    }
+
+    if (result > 0) {
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return false;
+}
+
 void load_letter_textures(void) {
   for (int i = 0; i < LETTER_COUNT; i++) {
     char path[256];
@@ -172,6 +196,14 @@ int main(int argc, char *argv[]) {
   Texture2D tile_texture = LoadTexture("assets/tile.png");
 
   load_words();
+  char **word_pointers = malloc(total_words * sizeof(char *));
+  char *current_word = words;
+  for (int i = 0; i < total_words; i++) {
+    word_pointers[i] = current_word;
+    current_word += strlen(current_word) + 1;
+    // printf("%s\n", word_pointers[i]);
+  }
+
   srand(time(NULL));
   init_letter_bag();
   shuffle_bag();
@@ -208,34 +240,22 @@ int main(int argc, char *argv[]) {
       printf("[click] cell=%u row=%u col=%u tile='%c' (idx=%u)\n", cell, row,
              col, letter_bag.tiles[board[cell]].tile_value, board[cell]);
 
-      if (!is_selected[board[cell]]) {
-        selection[selection_length++] = board[cell];
-        is_selected[board[cell]] = true;
+      uint8_t tile_idx = board[cell];
+      if (!is_selected[tile_idx]) {
+        selection[selection_length] = tile_idx;
+        is_selected[tile_idx] = true;
+
+        selected_word[selection_length] = letter_bag.tiles[tile_idx].tile_value;
+        selected_word[selection_length + 1] = '\0';
+
+        selection_length++;
       } else {
         printf("Tile already selected\n");
       }
 
-      // char *word_pointer = words;
-      // char selected_word[MAX_CHAR_SELECTION + 1] = {0};
-      // for (int i = 0; i < selection_length; i++) {
-      //   selected_word[i] = letter_bag.tiles[selection[i]].tile_value;
-      // }
-      // selected_word[selection_length] = '\0';
-      //
-      // for (int i = 0; i < total_words; i++) {
-      //   int result = strcmp(selected_word, word_pointer);
-      //
-      //   if (result == 0) {
-      //     printf("Match found!\n");
-      //     valid_word = true;
-      //     break;
-      //   } else {
-      //     valid_word = false;
-      //     printf("Match not found :(\n");
-      //     printf("%s != %s\n", selected_word, word_pointer);
-      //   }
-      //   word_pointer += strlen(word_pointer) + 1;
-      // }
+      valid_word =
+          binary_search_word(word_pointers, selected_word, total_words);
+      printf("Current word: %s\n", selected_word);
     }
 
     if (CheckCollisionPointRec(
@@ -252,6 +272,11 @@ int main(int argc, char *argv[]) {
         is_selected[selection[i]] = false;
       }
       selection_length = cell;
+      selected_word[selection_length] = '\0';
+
+      valid_word =
+          binary_search_word(word_pointers, selected_word, total_words);
+      printf("Current word: %s\n", selected_word);
     }
 
     //----------------------------------------------------------------------------------
