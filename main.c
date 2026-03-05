@@ -134,14 +134,11 @@ void init_letter_bag() {
       2,  // y
       1   // z
   };
-  Entity entity = {.position = {}, .type = TILE};
-
   int i = 0;
   for (int letter = 0; letter < 26; letter++) {
     for (int j = 0; j < letter_occurrence[letter]; j++) {
       letter_bag.tiles[i++] = (Entity){
           .type = TILE,
-          // .tile_location = BAG,
           .position = {},
           .height = 50,
           .width = 50,
@@ -208,19 +205,14 @@ int main(int argc, char *argv[]) {
   init_letter_bag();
   shuffle_bag();
 
-  bool fill_board = true;
+  for (int i = 0; i < BOARD_COUNT; i++) {
+    board[i] = letter_bag.remaining - 1;
+    letter_bag.remaining--;
+  }
   while (!WindowShouldClose()) {
     //----------------------------------------------------------------------------------
     // Update
     //----------------------------------------------------------------------------------
-    if (fill_board) {
-      for (int i = 0; i < BOARD_COUNT; i++) {
-        Entity *letter = &letter_bag.tiles[letter_bag.remaining - i - 1];
-        board[i] = letter_bag.remaining - i - 1;
-        letter_bag.remaining--;
-      }
-      fill_board = false;
-    }
 
     if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       // i wonder if this goto is sus
@@ -277,6 +269,11 @@ int main(int argc, char *argv[]) {
       valid_word =
           binary_search_word(word_pointers, selected_word, total_words);
       printf("Current word: %s\n", selected_word);
+    }
+
+    if (valid_word && CheckCollisionPointCircle(mouse_pos, submit_button_pos,
+                                                submit_button_radius)) {
+      printf("Submitted word %s!\n", selected_word);
     }
 
     //----------------------------------------------------------------------------------
