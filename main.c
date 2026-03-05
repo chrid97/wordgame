@@ -164,12 +164,22 @@ void load_words() {
   fclose(file);
 }
 
-int main(int argc, char *argv[]) {
-  InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
-  SetTargetFPS(0);
+typedef struct {
+  bool value[10];
+} HashMap;
 
-  load_letter_textures();
-  Texture2D tile_texture = LoadTexture("assets/tile.png");
+HashMap map = {.value = {50}};
+
+void set_map(HashMap *map) { map->value['aa'] = true; }
+
+int main(int argc, char *argv[]) {
+  printf("%u\n", map.value[0]);
+  // InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
+  // SetTargetFPS(0);
+
+  // load_letter_textures();
+  // Texture2D tile_texture = LoadTexture("assets/tile.png");
+  Texture2D tile_texture;
 
   load_words();
   srand(time(NULL));
@@ -177,7 +187,8 @@ int main(int argc, char *argv[]) {
   shuffle_bag();
 
   bool fill_board = true;
-  while (!WindowShouldClose()) {
+  // while (!WindowShouldClose()) {
+  while (false) {
     //----------------------------------------------------------------------------------
     // Update
     //----------------------------------------------------------------------------------
@@ -299,7 +310,7 @@ int main(int argc, char *argv[]) {
   //----------------------------------------------------------------------------------
   // De-Initialization
   //--------------------------------------------------------------------------------------
-  CloseWindow(); // Close window and OpenGL context
+  // CloseWindow(); // Close window and OpenGL context
   //--------------------------------------------------------------------------------------
 
   return 0;
