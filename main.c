@@ -73,8 +73,8 @@ const float board_origin_x = (VIRTUAL_WIDTH / 2.0) - board_width / 2.0;
 const float board_origin_y = VIRTUAL_HEIGHT - board_height;
 const Rectangle board_rect = {board_origin_x, board_origin_y, board_width,
                               board_height};
-const float selection_origin_x = 100;
-const float selection_origin_y = board_height - 200;
+const float selection_origin_x = 200;
+const float selection_origin_y = board_height;
 Vector2 submit_button_pos = {board_origin_x + board_width + 25,
                              VIRTUAL_HEIGHT - 25};
 float submit_button_radius = 20;
@@ -306,8 +306,8 @@ draw:
 
   for (int i = 0; i < selection_length; i++) {
     const int x = selection_origin_x + (i * (TILE_SIZE + padding));
-    const int y = selection_origin_y + 100;
-    draw_tile(selection[i], (Rectangle){x, y, TILE_SIZE, TILE_SIZE}, false);
+    draw_tile(selection[i],
+              (Rectangle){x, selection_origin_y, TILE_SIZE, TILE_SIZE}, false);
   }
 
   // Word Submit Button
