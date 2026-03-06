@@ -18,8 +18,8 @@
 #define BOARD_COL 4
 #define BOARD_ROW 4
 #define BOARD_COUNT (BOARD_COL * BOARD_ROW)
-#define TILE_SIZE 40
-#define TILE_NONE 0xFF // Sentinel Value
+#define TILE_SIZE 32
+// #define TILE_NONE 0xFF // Sentinel Value
 #define MAX_CHAR_SELECTION 10
 
 //----------------------------------------------------------------------------------
@@ -52,7 +52,7 @@ uint8_t selection_length = 0;
 
 char selected_word[MAX_CHAR_SELECTION + 1] = {0}; // actual word
 
-uint8_t board[BOARD_COUNT] = {TILE_NONE};         // index to tiles in bag
+uint8_t board[BOARD_COUNT] = {0};                 // index to tiles in bag
 uint8_t selected_cells[MAX_CHAR_SELECTION] = {0}; // Selected board index
 
 bool is_selected[LETTER_BAG_SIZE] = {0};
@@ -65,7 +65,7 @@ Texture2D tile_texture;
 Texture2D letter_textures[LETTER_COUNT] = {0};
 
 // UI
-const uint8_t padding = 10;
+const uint8_t padding = 3;
 const uint8_t pitch = TILE_SIZE + padding;
 const int board_width = BOARD_ROW * (TILE_SIZE + padding);
 const int board_height = BOARD_COL * (TILE_SIZE + padding);
@@ -196,6 +196,18 @@ void load_words() {
   fclose(file);
 }
 
+void draw_tile(int tile_idx, Rectangle rect, bool selected) {
+  Color tint = selected ? GRAY : WHITE;
+  DrawTexture(tile_texture, rect.x, rect.y, tint);
+
+  char tile_value = letter_bag.tiles[tile_idx].tile_value;
+  Texture2D letter_tex = letter_textures[tile_value - 'a'];
+
+  float x = rect.x + (rect.width - letter_tex.width) / 2.0f;
+  float y = rect.y + (rect.height - letter_tex.height) / 2.0f;
+  DrawTexture(letter_tex, (int)x, (int)y, tint);
+}
+
 void update_draw(void) {
   //----------------------------------------------------------------------------------
   // Update
@@ -284,26 +296,18 @@ draw:
                 BROWN);
 
   for (int i = 0; i < BOARD_COUNT; i++) {
-    Entity *tile = &letter_bag.tiles[board[i]];
-    const uint8_t row = i / 4;
-    const uint8_t col = i % 4;
+    const uint8_t row = i / BOARD_ROW;
+    const uint8_t col = i % BOARD_COL;
     const int x = board_origin_x + (col * (TILE_SIZE + padding));
     const int y = board_origin_y + (row * (TILE_SIZE + padding));
-    DrawRectangle(x, y, TILE_SIZE, TILE_SIZE, RED);
-
-    const Color tint = is_selected[board[i]] ? GRAY : WHITE;
-    DrawTextureEx(tile_texture, (Vector2){x, y}, 0, 1.3, tint);
-    DrawTexture(letter_textures[tile->tile_value - 'a'], x, y, WHITE);
+    draw_tile(board[i], (Rectangle){x, y, TILE_SIZE, TILE_SIZE},
+              is_selected[board[i]]);
   }
 
   for (int i = 0; i < selection_length; i++) {
-    Entity *tile = &letter_bag.tiles[selection[i]];
     const int x = selection_origin_x + (i * (TILE_SIZE + padding));
-    DrawTextureEx(tile_texture, (Vector2){x, selection_origin_y}, 0, 1.3,
-                  WHITE);
-    // (TODO) Center word
-    DrawTexture(letter_textures[tile->tile_value - 'a'], x, selection_origin_y,
-                WHITE);
+    const int y = selection_origin_y + 100;
+    draw_tile(selection[i], (Rectangle){x, y, TILE_SIZE, TILE_SIZE}, false);
   }
 
   // Word Submit Button
