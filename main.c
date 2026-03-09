@@ -67,6 +67,12 @@ char *current_word;
 Texture2D tile_texture;
 Texture2D letter_textures[LETTER_COUNT] = {0};
 
+Sound punch_sound;
+Sound keystroke_sound;
+Sound backspace_sound;
+
+Music upbeat_music;
+
 // UI
 const uint8_t padding = 3;
 const uint8_t pitch = TILE_SIZE + padding;
@@ -278,6 +284,8 @@ void update_draw(void) {
       selected_cells[selection_length] = cell;
 
       selection_length++;
+
+      PlaySound(keystroke_sound);
     } else {
       printf("Tile already selected\n");
     }
@@ -306,6 +314,8 @@ void update_draw(void) {
     // (TODO) only binary search if selection_length > 0
     valid_word = binary_search_word(word_pointers, selected_word, total_words);
     printf("Current word: %s\n", selected_word);
+
+    PlaySound(backspace_sound);
   }
 
   if (valid_word && CheckCollisionPointCircle(mouse_pos, submit_button_pos,
@@ -325,6 +335,7 @@ void update_draw(void) {
     if (enemy.health_points < 0) {
       enemy.health_points = 0;
     }
+    PlaySound(punch_sound);
 
     selection_length = 0;
     selected_word[0] = '\0';
@@ -396,7 +407,13 @@ draw:
 
 int main(int argc, char *argv[]) {
   InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
+  InitAudioDevice();
   SetTargetFPS(0);
+
+  punch_sound = LoadSound("assets/energetic_punch.wav");
+  keystroke_sound = LoadSound("assets/Keystroke14.wav");
+  backspace_sound = LoadSound("assets/Backspace1.wav");
+  upbeat_music = LoadMusicStream("assets/upbeat_bg.wav");
 
   load_letter_textures();
   tile_texture = LoadTexture("assets/tile.png");
@@ -408,6 +425,8 @@ int main(int argc, char *argv[]) {
     word_pointers[i] = current_word;
     current_word += strlen(current_word) + 1;
   }
+
+  PlayMusicStream(upbeat_music);
 
   srand(time(NULL));
   init_letter_bag();
@@ -421,6 +440,8 @@ int main(int argc, char *argv[]) {
   emscripten_set_main_loop(update_draw, 0, 1);
 #else
   while (!WindowShouldClose()) {
+    UpdateMusicStream(upbeat_music);
+    SetMusicVolume(upbeat_music, 0.1f);
     update_draw();
   }
 #endif
@@ -428,6 +449,9 @@ int main(int argc, char *argv[]) {
   //----------------------------------------------------------------------------------
   // De-Initialization
   //--------------------------------------------------------------------------------------
+  UnloadSound(punch_sound);
+  UnloadMusicStream(upbeat_music);
+  CloseAudioDevice();
   CloseWindow(); // Close window and OpenGL context
   //--------------------------------------------------------------------------------------
 
