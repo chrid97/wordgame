@@ -211,8 +211,8 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   DrawTexture(letter_tex, (int)x, (int)y, tint);
 }
 
-Entity player = {.health_points = 10, .total_health_points = 20};
-Entity enemy = {.health_points = 10, .total_health_points = 20};
+Entity player = {.health_points = 20, .total_health_points = 20};
+Entity enemy = {.health_points = 20, .total_health_points = 20};
 
 void update_draw(void) {
   //----------------------------------------------------------------------------------
@@ -331,8 +331,12 @@ draw:
 
   Rectangle player_health = {player_sprite.x - 11, player_sprite.y + 110, 80,
                              6};
-  DrawRectangleRec(player_health, RED);
+  DrawRectangleRec(player_health, GRAY);
   DrawRectangleRoundedLinesEx(player_health, 100, 4, 1, BLACK);
+  player_health.width =
+      ((float)player.health_points / player.total_health_points) *
+      player_health.width;
+  DrawRectangleRec(player_health, RED);
 
   // Enemy
   uint8_t enemy_sprite_width = 50;
@@ -349,10 +353,10 @@ draw:
   enemy_health.width =
       ((float)enemy.health_points / enemy.total_health_points) *
       enemy_health.width;
+  DrawRectangleRec(enemy_health, RED);
   // printf("HP %u\n", enemy.health_points);
   // printf("Total HP %u\n", enemy.total_health_points);
   // printf("%f\n", (float)enemy.health_points / enemy.total_health_points);
-  DrawRectangleRec(enemy_health, RED);
 
   EndDrawing();
 }
