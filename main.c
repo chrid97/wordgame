@@ -33,8 +33,8 @@ typedef struct {
   int height;
   char tile_value;
 
-  int max_health_points;
-  int health_points;
+  uint8_t max_health_points;
+  uint8_t health_points;
 } Entity;
 
 typedef struct {
@@ -72,6 +72,8 @@ Sound keystroke_sound;
 Sound backspace_sound;
 
 Music upbeat_music;
+
+bool player_turn = true;
 
 // UI
 const uint8_t padding = 3;
@@ -256,7 +258,22 @@ void update_draw(void) {
   //----------------------------------------------------------------------------------
   // Update
   //----------------------------------------------------------------------------------
-  if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+
+  if (selection_length < 0) {
+    valid_word = false;
+  }
+
+  if (!player_turn) {
+    player.health_points -= rand() % 5;
+    if (player.health_points < 0) {
+      player.health_points = 0;
+    }
+
+    player_turn = true;
+    goto draw;
+  }
+
+  if (player_turn && !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
     // i wonder if this goto is sus
     goto draw;
   }
@@ -339,6 +356,8 @@ void update_draw(void) {
 
     selection_length = 0;
     selected_word[0] = '\0';
+
+    player_turn = false;
   }
 
   // (TODO) Right click should clear selection
