@@ -33,7 +33,7 @@ typedef struct {
   int height;
   char tile_value;
 
-  int total_health_points;
+  int max_health_points;
   int health_points;
 } Entity;
 
@@ -211,8 +211,40 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   DrawTexture(letter_tex, (int)x, (int)y, tint);
 }
 
-Entity player = {.health_points = 20, .total_health_points = 20};
-Entity enemy = {.health_points = 20, .total_health_points = 20};
+void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
+  DrawRectangleRec(bar, GRAY);
+  DrawRectangleRoundedLinesEx(bar, 100, 4, 1, BLACK);
+
+  Rectangle fill = bar;
+  fill.width = ((float)current_hp / max_hp) * bar.width;
+  DrawRectangleRec(fill, RED);
+
+  char hp_text[32];
+  snprintf(hp_text, sizeof(hp_text), "%d/%d", current_hp, max_hp);
+
+  const int font_size = 18;
+  const int text_width = MeasureText(hp_text, font_size);
+
+  int text_x = bar.x + (bar.width - text_width) / 2;
+  int text_y = bar.y - (float)font_size / 3;
+
+  // --- outline (draw multiple times) ---
+  DrawText(hp_text, text_x - 2, text_y, font_size, BLACK);
+  DrawText(hp_text, text_x + 2, text_y, font_size, BLACK);
+  DrawText(hp_text, text_x, text_y - 2, font_size, BLACK);
+  DrawText(hp_text, text_x, text_y + 2, font_size, BLACK);
+
+  DrawText(hp_text, text_x - 1, text_y - 1, font_size, BLACK);
+  DrawText(hp_text, text_x + 1, text_y - 1, font_size, BLACK);
+  DrawText(hp_text, text_x - 1, text_y + 1, font_size, BLACK);
+  DrawText(hp_text, text_x + 1, text_y + 1, font_size, BLACK);
+
+  // --- main text ---
+  DrawText(hp_text, text_x, text_y, font_size, WHITE);
+}
+
+Entity player = {.health_points = 20, .max_health_points = 20};
+Entity enemy = {.health_points = 20, .max_health_points = 20};
 
 void update_draw(void) {
   //----------------------------------------------------------------------------------
@@ -287,9 +319,19 @@ void update_draw(void) {
       printf("Refilled bag with tile %c\n",
              letter_bag.tiles[letter_bag.remaining].tile_value);
     };
+
+    // deal damage to enemy
+    enemy.health_points -= selection_length;
+    if (enemy.health_points < 0) {
+      enemy.health_points = 0;
+    }
+
     selection_length = 0;
     selected_word[0] = '\0';
   }
+
+  // (TODO) Right click should clear selection
+  // (MAYBE) right click on selected tile to insert before or after
 
   //----------------------------------------------------------------------------------
   // Draw
@@ -331,12 +373,8 @@ draw:
 
   Rectangle player_health = {player_sprite.x - 11, player_sprite.y + 110, 80,
                              6};
-  DrawRectangleRec(player_health, GRAY);
-  DrawRectangleRoundedLinesEx(player_health, 100, 4, 1, BLACK);
-  player_health.width =
-      ((float)player.health_points / player.total_health_points) *
-      player_health.width;
-  DrawRectangleRec(player_health, RED);
+  draw_health_bar(player_health, player.health_points,
+                  player.max_health_points);
 
   // Enemy
   uint8_t enemy_sprite_width = 50;
@@ -348,15 +386,10 @@ draw:
   DrawRectangleLinesEx(enemy_sprite, 1, BLACK);
 
   Rectangle enemy_health = {enemy_sprite.x - 11, enemy_sprite.y + 110, 80, 6};
-  DrawRectangleRec(enemy_health, GRAY);
-  DrawRectangleRoundedLinesEx(enemy_health, 100, 4, 1, BLACK);
-  enemy_health.width =
-      ((float)enemy.health_points / enemy.total_health_points) *
-      enemy_health.width;
-  DrawRectangleRec(enemy_health, RED);
+  draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
   // printf("HP %u\n", enemy.health_points);
-  // printf("Total HP %u\n", enemy.total_health_points);
-  // printf("%f\n", (float)enemy.health_points / enemy.total_health_points);
+  // printf("Total HP %u\n", enemy.max_health_points);
+  // printf("%f\n", (float)enemy.health_points / enemy.max_health_points);
 
   EndDrawing();
 }
