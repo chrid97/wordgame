@@ -32,6 +32,9 @@ typedef struct {
   int width;
   int height;
   char tile_value;
+
+  int total_health_points;
+  int health_points;
 } Entity;
 
 typedef struct {
@@ -208,6 +211,9 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   DrawTexture(letter_tex, (int)x, (int)y, tint);
 }
 
+Entity player = {.health_points = 10, .total_health_points = 20};
+Entity enemy = {.health_points = 10, .total_health_points = 20};
+
 void update_draw(void) {
   //----------------------------------------------------------------------------------
   // Update
@@ -316,6 +322,37 @@ draw:
   DrawText("Submit", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
            BLACK);
   DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
+
+  // Player
+  Rectangle player_sprite = {70, board_origin_y - 110, 50, 100};
+  DrawRectangleRec(player_sprite, GRAY);
+  DrawRectangleRec(player_sprite, BLUE);
+  DrawRectangleLinesEx(player_sprite, 1, BLACK);
+
+  Rectangle player_health = {player_sprite.x - 11, player_sprite.y + 110, 80,
+                             6};
+  DrawRectangleRec(player_health, RED);
+  DrawRectangleRoundedLinesEx(player_health, 100, 4, 1, BLACK);
+
+  // Enemy
+  uint8_t enemy_sprite_width = 50;
+  int enemy_sprite_pos_x =
+      (GetScreenWidth() - player_sprite.x - enemy_sprite_width);
+  Rectangle enemy_sprite = {enemy_sprite_pos_x, board_origin_y - 110,
+                            enemy_sprite_width, 100};
+  DrawRectangleRec(enemy_sprite, RED);
+  DrawRectangleLinesEx(enemy_sprite, 1, BLACK);
+
+  Rectangle enemy_health = {enemy_sprite.x - 11, enemy_sprite.y + 110, 80, 6};
+  DrawRectangleRec(enemy_health, GRAY);
+  DrawRectangleRoundedLinesEx(enemy_health, 100, 4, 1, BLACK);
+  enemy_health.width =
+      ((float)enemy.health_points / enemy.total_health_points) *
+      enemy_health.width;
+  // printf("HP %u\n", enemy.health_points);
+  // printf("Total HP %u\n", enemy.total_health_points);
+  // printf("%f\n", (float)enemy.health_points / enemy.total_health_points);
+  DrawRectangleRec(enemy_health, RED);
 
   EndDrawing();
 }
