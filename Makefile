@@ -17,4 +17,4 @@ web:
 	  -s SINGLE_FILE=1 \
 	  --preload-file assets \
 	  --preload-file all_words.txt \
-	  -o build/wordgame.html
+	  -o build/index.html

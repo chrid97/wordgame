@@ -258,17 +258,18 @@ void update_draw(void) {
   //----------------------------------------------------------------------------------
   // Update
   //----------------------------------------------------------------------------------
+  UpdateMusicStream(upbeat_music);
+  SetMusicVolume(upbeat_music, 0.1f);
 
-  if (selection_length < 0) {
-    valid_word = false;
-  }
+  // if (selection_length < 0) {
+  //   valid_word = false;
+  // }
 
   if (!player_turn) {
     player.health_points -= rand() % 5;
     if (player.health_points < 0) {
       player.health_points = 0;
     }
-
     player_turn = true;
     goto draw;
   }
@@ -302,13 +303,14 @@ void update_draw(void) {
 
       selection_length++;
 
+      valid_word =
+          selection_length > 0 &&
+          binary_search_word(word_pointers, selected_word, total_words);
       PlaySound(keystroke_sound);
     } else {
       printf("Tile already selected\n");
     }
 
-    // (TODO) only binary search when we select an unselected tile
-    valid_word = binary_search_word(word_pointers, selected_word, total_words);
     printf("Current word: %s\n", selected_word);
   }
 
@@ -328,8 +330,8 @@ void update_draw(void) {
     selection_length = cell;
     selected_word[selection_length] = '\0';
 
-    // (TODO) only binary search if selection_length > 0
-    valid_word = binary_search_word(word_pointers, selected_word, total_words);
+    valid_word = selection_length > 0 &&
+                 binary_search_word(word_pointers, selected_word, total_words);
     printf("Current word: %s\n", selected_word);
 
     PlaySound(backspace_sound);
@@ -356,6 +358,7 @@ void update_draw(void) {
 
     selection_length = 0;
     selected_word[0] = '\0';
+    valid_word = false;
 
     player_turn = false;
   }
@@ -459,8 +462,6 @@ int main(int argc, char *argv[]) {
   emscripten_set_main_loop(update_draw, 0, 1);
 #else
   while (!WindowShouldClose()) {
-    UpdateMusicStream(upbeat_music);
-    SetMusicVolume(upbeat_music, 0.1f);
     update_draw();
   }
 #endif
