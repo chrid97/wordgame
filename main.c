@@ -70,6 +70,7 @@ Texture2D background;
 
 Texture2D mushroom_idle;
 Texture2D knight_idle;
+Texture2D knight_attack;
 
 Sound punch_sound;
 Sound keystroke_sound;
@@ -477,6 +478,8 @@ int main(int argc, char *argv[]) {
 
   mushroom_idle = LoadTexture("assets/mushroom/Mushroom-Idle.png");
   knight_idle = LoadTexture("assets/knight/IDLE.png");
+  knight_attack = LoadTexture("assets/knight/attack-1.png");
+
   background = LoadTexture("assets/background.png");
 
   load_letter_textures();
