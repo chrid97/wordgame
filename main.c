@@ -71,9 +71,9 @@ Texture2D letter_textures[LETTER_COUNT] = {0};
 Texture2D background;
 
 Texture2D mushroom_idle;
+Texture2D mushroom_hit;
 Texture2D knight_idle;
 Texture2D knight_attack;
-float player_attack_start_time = 0.0f;
 
 Sound punch_sound;
 Sound keystroke_sound;
@@ -83,6 +83,13 @@ Music upbeat_music;
 
 bool player_turn = true;
 bool player_attack = false;
+float player_attack_start_time = 0.0f;
+int player_pending_damage = 0;
+// uint8_t current_player_frame = 0;
+
+bool enemy_damage_animation = false;
+bool player_attack_applied = false;
+float enemy_damage_start_time = 0.0f;
 
 // UI
 const uint8_t padding = 3;
@@ -270,13 +277,30 @@ void update_draw(void) {
   UpdateMusicStream(upbeat_music);
   SetMusicVolume(upbeat_music, 0.1f);
 
+  // if (selection_length >= enemy.health_points) {
+  //   enemy.health_points = 0;
+  // } else {
+  //   enemy.health_points -= selection_length;
+  // }
+  // PlaySound(punch_sound);
+
+  // if (player_pending_damage > 0 && current_player_frame == 4) {
+  //   PlaySound(punch_sound);
+  //   if (player_pending_damage >= enemy.health_points) {
+  //     enemy.health_points = 0;
+  //   } else {
+  //     enemy.health_points -= player_pending_damage;
+  //   }
+  //   player_pending_damage = 0;
+  // }
+
   if (!player_turn) {
-    int damage = rand() % 5;
-    if (damage >= player.health_points) {
-      player.health_points = 0;
-    } else {
-      player.health_points -= damage;
-    }
+    // int damage = rand() % 5;
+    // if (damage >= player.health_points) {
+    //   player.health_points = 0;
+    // } else {
+    //   player.health_points -= damage;
+    // }
     player_turn = true;
     goto draw;
   }
@@ -357,12 +381,14 @@ void update_draw(void) {
     };
 
     // deal damage to enemy
-    if (selection_length >= enemy.health_points) {
-      enemy.health_points = 0;
-    } else {
-      enemy.health_points -= selection_length;
-    }
-    PlaySound(punch_sound);
+    // if (selection_length >= enemy.health_points) {
+    //   enemy.health_points = 0;
+    // } else {
+    //   enemy.health_points -= selection_length;
+    // }
+    // PlaySound(punch_sound);
+
+    player_pending_damage = selection_length;
 
     selection_length = 0;
     selected_word[0] = '\0';
@@ -416,6 +442,18 @@ draw:
 
     float elapsed = GetTime() - player_attack_start_time;
     int knight_frame = (int)(elapsed * attack_fps);
+
+    if (knight_frame == 4) {
+      enemy_damage_start_time = GetTime();
+      enemy_damage_animation = true;
+      PlaySound(punch_sound);
+      if (player_pending_damage >= enemy.health_points) {
+        enemy.health_points = 0;
+      } else {
+        enemy.health_points -= player_pending_damage;
+      }
+      player_pending_damage = 0;
+    }
 
     if (knight_frame >= knight_attack_frames) {
       player_attack = false;
@@ -475,33 +513,68 @@ draw:
   }
 
   // Enemy
-  const int mushroom_frame_w = 80;
-  const int mushroom_frame_h = 64;
-  const int mushroom_idle_frames = 7;
-  const float mushroom_scale = 2.5f;
+  if (enemy_damage_animation) {
+    const int mushroom_frame_w = 32;
+    const int mushroom_frame_h = 32;
+    const int mushroom_hit_frames = 5;
+    const float mushroom_scale = 2.5f;
+    const float mushroom_hit_fps = 15.0f;
 
-  int frame = ((int)(GetTime() * 8.0f)) % mushroom_idle_frames;
+    float elapsed = GetTime() - enemy_damage_start_time;
+    int frame = (int)(elapsed * mushroom_hit_fps);
 
-  Rectangle mushroom_src = {frame * mushroom_frame_w, 0, mushroom_frame_w,
-                            mushroom_frame_h};
+    if (frame >= mushroom_hit_frames) {
+      enemy_damage_animation = false;
+      frame = mushroom_hit_frames - 1;
+    }
 
-  float enemy_dest_w = mushroom_frame_w * mushroom_scale;
-  float enemy_dest_h = mushroom_frame_h * mushroom_scale;
+    Rectangle mushroom_src = {frame * mushroom_frame_w, 0, mushroom_frame_w,
+                              mushroom_frame_h};
 
-  float enemy_ground_y = board_origin_y - 10;
-  float enemy_center_x = GetScreenWidth() - 100;
+    float enemy_dest_w = mushroom_frame_w * mushroom_scale;
+    float enemy_dest_h = mushroom_frame_h * mushroom_scale;
 
-  Rectangle enemy_sprite = {enemy_center_x - enemy_dest_w / 2.0f,
-                            enemy_ground_y - enemy_dest_h, enemy_dest_w,
-                            enemy_dest_h};
+    float enemy_ground_y = board_origin_y - 10;
+    float enemy_center_x = GetScreenWidth() - 100;
 
-  DrawTexturePro(mushroom_idle, mushroom_src, enemy_sprite, (Vector2){0, 0}, 0,
-                 WHITE);
+    Rectangle enemy_sprite = {enemy_center_x - enemy_dest_w / 2.0f,
+                              enemy_ground_y - enemy_dest_h, enemy_dest_w,
+                              enemy_dest_h};
 
-  Rectangle enemy_health = {enemy_sprite.x + (enemy_sprite.width - 80) / 2.0f,
-                            enemy_sprite.y + enemy_sprite.height + 8, 80, 6};
-  draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
+    DrawTexturePro(mushroom_hit, mushroom_src, enemy_sprite, (Vector2){0, 0}, 0,
+                   WHITE);
 
+    Rectangle enemy_health = {enemy_sprite.x + (enemy_sprite.width - 80) / 2.0f,
+                              enemy_sprite.y + enemy_sprite.height + 8, 80, 6};
+    draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
+  } else {
+    const int mushroom_frame_w = 80;
+    const int mushroom_frame_h = 64;
+    const int mushroom_idle_frames = 7;
+    const float mushroom_scale = 2.5f;
+
+    int frame = ((int)(GetTime() * 8.0f)) % mushroom_idle_frames;
+
+    Rectangle mushroom_src = {frame * mushroom_frame_w, 0, mushroom_frame_w,
+                              mushroom_frame_h};
+
+    float enemy_dest_w = mushroom_frame_w * mushroom_scale;
+    float enemy_dest_h = mushroom_frame_h * mushroom_scale;
+
+    float enemy_ground_y = board_origin_y - 10;
+    float enemy_center_x = GetScreenWidth() - 100;
+
+    Rectangle enemy_sprite = {enemy_center_x - enemy_dest_w / 2.0f,
+                              enemy_ground_y - enemy_dest_h, enemy_dest_w,
+                              enemy_dest_h};
+
+    DrawTexturePro(mushroom_idle, mushroom_src, enemy_sprite, (Vector2){0, 0},
+                   0, WHITE);
+
+    Rectangle enemy_health = {enemy_sprite.x + (enemy_sprite.width - 80) / 2.0f,
+                              enemy_sprite.y + enemy_sprite.height + 8, 80, 6};
+    draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
+  }
   // printf("HP %u\n", enemy.health_points);
   // printf("Total HP %u\n", enemy.max_health_points);
   // printf("%f\n", (float)enemy.health_points / enemy.max_health_points);
@@ -520,6 +593,7 @@ int main(int argc, char *argv[]) {
   upbeat_music = LoadMusicStream("assets/upbeat_bg.wav");
 
   mushroom_idle = LoadTexture("assets/mushroom/Mushroom-Idle.png");
+  mushroom_hit = LoadTexture("assets/mushroom/mushroom-hit.png");
   knight_idle = LoadTexture("assets/knight/IDLE.png");
   knight_attack = LoadTexture("assets/knight/attack-1.png");
 
