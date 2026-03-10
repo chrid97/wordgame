@@ -43,6 +43,8 @@ typedef struct {
   uint8_t size; // total number of tiles
 } LetterBag;
 
+// typedef enum { IDLE, ATTACK } Animation;
+
 //----------------------------------------------------------------------------------
 // State
 //----------------------------------------------------------------------------------
@@ -71,6 +73,7 @@ Texture2D background;
 Texture2D mushroom_idle;
 Texture2D knight_idle;
 Texture2D knight_attack;
+float player_attack_start_time = 0.0f;
 
 Sound punch_sound;
 Sound keystroke_sound;
@@ -79,6 +82,7 @@ Sound backspace_sound;
 Music upbeat_music;
 
 bool player_turn = true;
+bool player_attack = false;
 
 // UI
 const uint8_t padding = 3;
@@ -364,6 +368,8 @@ void update_draw(void) {
     selected_word[0] = '\0';
     valid_word = false;
 
+    player_attack = true;
+    player_attack_start_time = GetTime();
     player_turn = false;
   }
 
@@ -401,35 +407,72 @@ draw:
            BLACK);
   DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
 
-  // Player
-  const int knight_frame_w = 32;
-  const int knight_frame_h = 37;
-  const int knight_idle_frames = knight_idle.width / knight_frame_w;
-  const float knight_scale = 2.5f;
+  if (player_attack) {
+    const int knight_frame_w = 60;
+    const int knight_frame_h = 36;
+    const int knight_attack_frames = 6;
+    const float knight_scale = 2.5f;
+    const float attack_fps = 18.0f;
 
-  int knight_frame = ((int)(GetTime() * 7.5f)) % knight_idle_frames;
+    float elapsed = GetTime() - player_attack_start_time;
+    int knight_frame = (int)(elapsed * attack_fps);
 
-  Rectangle knight_src = {knight_frame * knight_frame_w, 0, knight_frame_w,
-                          knight_frame_h};
+    if (knight_frame >= knight_attack_frames) {
+      player_attack = false;
+      knight_frame = knight_attack_frames - 1;
+    }
 
-  float player_dest_w = knight_frame_w * knight_scale;
-  float player_dest_h = knight_frame_h * knight_scale;
+    float player_dest_w = knight_frame_w * knight_scale;
+    float player_dest_h = knight_frame_h * knight_scale;
 
-  float player_ground_y = board_origin_y - 10;
-  float player_center_x = 100;
+    float player_ground_y = board_origin_y - 10;
+    float player_center_x = 100;
 
-  Rectangle player_sprite = {player_center_x - player_dest_w / 2.0f,
-                             player_ground_y - player_dest_h, player_dest_w,
-                             player_dest_h};
+    Rectangle player_sprite = {player_center_x - player_dest_w / 2.0f,
+                               player_ground_y - player_dest_h, player_dest_w,
+                               player_dest_h};
 
-  DrawTexturePro(knight_idle, knight_src, player_sprite, (Vector2){0, 0}, 0,
-                 WHITE);
+    Rectangle knight_src = {knight_frame * knight_frame_w, 0, knight_frame_w,
+                            knight_frame_h};
 
-  Rectangle player_health = {player_sprite.x +
-                                 (player_sprite.width - 80) / 2.0f,
-                             player_sprite.y + player_sprite.height + 8, 80, 6};
-  draw_health_bar(player_health, player.health_points,
-                  player.max_health_points);
+    DrawTexturePro(knight_attack, knight_src, player_sprite, (Vector2){0, 0}, 0,
+                   WHITE);
+
+    Rectangle player_health = {
+        player_sprite.x + (player_sprite.width - 80) / 2.0f,
+        player_sprite.y + player_sprite.height + 8, 80, 6};
+    draw_health_bar(player_health, player.health_points,
+                    player.max_health_points);
+  } else {
+    const int knight_frame_w = 32;
+    const int knight_frame_h = 37;
+    const int knight_idle_frames = knight_idle.width / knight_frame_w;
+    const float knight_scale = 2.5f;
+
+    int knight_frame = ((int)(GetTime() * 7.5f)) % knight_idle_frames;
+
+    Rectangle knight_src = {knight_frame * knight_frame_w, 0, knight_frame_w,
+                            knight_frame_h};
+
+    float player_dest_w = knight_frame_w * knight_scale;
+    float player_dest_h = knight_frame_h * knight_scale;
+
+    float player_ground_y = board_origin_y - 10;
+    float player_center_x = 100;
+
+    Rectangle player_sprite = {player_center_x - player_dest_w / 2.0f,
+                               player_ground_y - player_dest_h, player_dest_w,
+                               player_dest_h};
+
+    DrawTexturePro(knight_idle, knight_src, player_sprite, (Vector2){0, 0}, 0,
+                   WHITE);
+
+    Rectangle player_health = {
+        player_sprite.x + (player_sprite.width - 80) / 2.0f,
+        player_sprite.y + player_sprite.height + 8, 80, 6};
+    draw_health_bar(player_health, player.health_points,
+                    player.max_health_points);
+  }
 
   // Enemy
   const int mushroom_frame_w = 80;
@@ -469,7 +512,7 @@ draw:
 int main(int argc, char *argv[]) {
   InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
   InitAudioDevice();
-  SetTargetFPS(0);
+  SetTargetFPS(60);
 
   punch_sound = LoadSound("assets/energetic_punch.wav");
   keystroke_sound = LoadSound("assets/Keystroke14.wav");
