@@ -66,6 +66,10 @@ char *current_word;
 
 Texture2D tile_texture;
 Texture2D letter_textures[LETTER_COUNT] = {0};
+Texture2D background;
+
+Texture2D mushroom_idle;
+Texture2D knight_idle;
 
 Sound punch_sound;
 Sound keystroke_sound;
@@ -261,14 +265,12 @@ void update_draw(void) {
   UpdateMusicStream(upbeat_music);
   SetMusicVolume(upbeat_music, 0.1f);
 
-  // if (selection_length < 0) {
-  //   valid_word = false;
-  // }
-
   if (!player_turn) {
-    player.health_points -= rand() % 5;
-    if (player.health_points < 0) {
+    int damage = rand() % 5;
+    if (damage >= player.health_points) {
       player.health_points = 0;
+    } else {
+      player.health_points -= damage;
     }
     player_turn = true;
     goto draw;
@@ -350,9 +352,10 @@ void update_draw(void) {
     };
 
     // deal damage to enemy
-    enemy.health_points -= selection_length;
-    if (enemy.health_points < 0) {
+    if (selection_length >= enemy.health_points) {
       enemy.health_points = 0;
+    } else {
+      enemy.health_points -= selection_length;
     }
     PlaySound(punch_sound);
 
@@ -371,10 +374,9 @@ void update_draw(void) {
   //----------------------------------------------------------------------------------
 draw:
   BeginDrawing();
-  ClearBackground(ORANGE);
-
-  DrawRectangle(board_origin_x, board_origin_y, board_width, board_height,
-                BROWN);
+  Rectangle src = {0, 0, background.width, background.height};
+  Rectangle dest = {0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT};
+  DrawTexturePro(background, src, dest, (Vector2){0, 0}, 0, WHITE);
 
   for (int i = 0; i < BOARD_COUNT; i++) {
     const uint8_t row = i / BOARD_ROW;
@@ -399,27 +401,63 @@ draw:
   DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
 
   // Player
-  Rectangle player_sprite = {70, board_origin_y - 110, 50, 100};
-  DrawRectangleRec(player_sprite, GRAY);
-  DrawRectangleRec(player_sprite, BLUE);
-  DrawRectangleLinesEx(player_sprite, 1, BLACK);
+  const int knight_frame_w = 32;
+  const int knight_frame_h = 37;
+  const int knight_idle_frames = knight_idle.width / knight_frame_w;
+  const float knight_scale = 2.5f;
 
-  Rectangle player_health = {player_sprite.x - 11, player_sprite.y + 110, 80,
-                             6};
+  int knight_frame = ((int)(GetTime() * 7.5f)) % knight_idle_frames;
+
+  Rectangle knight_src = {knight_frame * knight_frame_w, 0, knight_frame_w,
+                          knight_frame_h};
+
+  float player_dest_w = knight_frame_w * knight_scale;
+  float player_dest_h = knight_frame_h * knight_scale;
+
+  float player_ground_y = board_origin_y - 10;
+  float player_center_x = 100;
+
+  Rectangle player_sprite = {player_center_x - player_dest_w / 2.0f,
+                             player_ground_y - player_dest_h, player_dest_w,
+                             player_dest_h};
+
+  DrawTexturePro(knight_idle, knight_src, player_sprite, (Vector2){0, 0}, 0,
+                 WHITE);
+
+  Rectangle player_health = {player_sprite.x +
+                                 (player_sprite.width - 80) / 2.0f,
+                             player_sprite.y + player_sprite.height + 8, 80, 6};
   draw_health_bar(player_health, player.health_points,
                   player.max_health_points);
 
   // Enemy
-  uint8_t enemy_sprite_width = 50;
-  int enemy_sprite_pos_x =
-      (GetScreenWidth() - player_sprite.x - enemy_sprite_width);
-  Rectangle enemy_sprite = {enemy_sprite_pos_x, board_origin_y - 110,
-                            enemy_sprite_width, 100};
-  DrawRectangleRec(enemy_sprite, RED);
-  DrawRectangleLinesEx(enemy_sprite, 1, BLACK);
+  const int mushroom_frame_w = 80;
+  const int mushroom_frame_h = 64;
+  const int mushroom_idle_frames = 7;
+  const float mushroom_scale = 2.5f;
 
-  Rectangle enemy_health = {enemy_sprite.x - 11, enemy_sprite.y + 110, 80, 6};
+  int frame = ((int)(GetTime() * 8.0f)) % mushroom_idle_frames;
+
+  Rectangle mushroom_src = {frame * mushroom_frame_w, 0, mushroom_frame_w,
+                            mushroom_frame_h};
+
+  float enemy_dest_w = mushroom_frame_w * mushroom_scale;
+  float enemy_dest_h = mushroom_frame_h * mushroom_scale;
+
+  float enemy_ground_y = board_origin_y - 10;
+  float enemy_center_x = GetScreenWidth() - 100;
+
+  Rectangle enemy_sprite = {enemy_center_x - enemy_dest_w / 2.0f,
+                            enemy_ground_y - enemy_dest_h, enemy_dest_w,
+                            enemy_dest_h};
+
+  DrawTexturePro(mushroom_idle, mushroom_src, enemy_sprite, (Vector2){0, 0}, 0,
+                 WHITE);
+
+  Rectangle enemy_health = {enemy_sprite.x + (enemy_sprite.width - 80) / 2.0f,
+                            enemy_sprite.y + enemy_sprite.height + 8, 80, 6};
   draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
+
   // printf("HP %u\n", enemy.health_points);
   // printf("Total HP %u\n", enemy.max_health_points);
   // printf("%f\n", (float)enemy.health_points / enemy.max_health_points);
@@ -436,6 +474,10 @@ int main(int argc, char *argv[]) {
   keystroke_sound = LoadSound("assets/Keystroke14.wav");
   backspace_sound = LoadSound("assets/Backspace1.wav");
   upbeat_music = LoadMusicStream("assets/upbeat_bg.wav");
+
+  mushroom_idle = LoadTexture("assets/mushroom/Mushroom-Idle.png");
+  knight_idle = LoadTexture("assets/knight/IDLE.png");
+  background = LoadTexture("assets/background.png");
 
   load_letter_textures();
   tile_texture = LoadTexture("assets/tile.png");
