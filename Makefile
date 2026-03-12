@@ -17,4 +17,6 @@ web:
 	  -s SINGLE_FILE=1 \
 	  --preload-file assets \
 	  --preload-file all_words.txt \
+		-sINITIAL_MEMORY=33554432 \
+		-sALLOW_MEMORY_GROWTH=1 \
 	  -o build/index.html

@@ -519,6 +519,7 @@ draw:
            BLACK);
   DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
 
+  // (TODO) draw shadows under sprites
   const float scale = 2.5f;
   switch (player_action) {
   case ATTACK: {
@@ -534,6 +535,7 @@ draw:
     Rectangle dest = {100 - dest_w / 2.0f, ground_y - dest_h, dest_w, dest_h};
     Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
     DrawTexturePro(knight_attack, src, dest, (Vector2){0, 0}, 0, WHITE);
+
     Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
                                dest.y + dest.height + 8, 80, 6};
     draw_health_bar(player_health, player.health_points,
