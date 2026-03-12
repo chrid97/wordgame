@@ -22,6 +22,8 @@
 // #define TILE_NONE 0xFF // Sentinel Value
 #define MAX_CHAR_SELECTION 10
 
+#define TURN_TRANSITION_DURATION 1.0f
+
 //----------------------------------------------------------------------------------
 // Types
 //----------------------------------------------------------------------------------
@@ -47,10 +49,12 @@ typedef struct {
 typedef enum { IDLE, ATTACK, HURT } Action;
 
 typedef enum {
+  TURN_TRANSITION_TO_PLAYER,
   PLAYER_TURN,
-  PLAYER_ACTION_RESOLVE,
+  // PLAYER_ACTION_RESOLVE,
+  TURN_TRANSITION_TO_ENEMY,
   ENEMY_TURN,
-  ENEMY_ACTION_RESOLVE
+  // ENEMY_ACTION_RESOLVE
 } Phase;
 
 //----------------------------------------------------------------------------------
@@ -95,7 +99,7 @@ Music upbeat_music;
 Action enemy_action = IDLE;
 Action player_action = IDLE;
 
-Phase phase = PLAYER_TURN;
+Phase phase = TURN_TRANSITION_TO_PLAYER;
 
 int player_pending_damage = 0;
 float player_attack_start_time = 0.0f;
@@ -106,6 +110,8 @@ bool player_hit_applied = false;
 float enemy_attack_start_time = 0.0f;
 float enemy_damage_start_time = 0.0f;
 bool enemy_hit_applied = false;
+
+float turn_transition_start_time = 1.0f;
 
 // UI
 const uint8_t padding = 3;
@@ -268,7 +274,7 @@ void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
   int text_x = bar.x + (bar.width - text_width) / 2;
   int text_y = bar.y - (float)font_size / 3;
 
-  // --- outline (draw multiple times) ---
+  // --- BLACK (draw multiple times) ---
   DrawText(hp_text, text_x - 2, text_y, font_size, BLACK);
   DrawText(hp_text, text_x + 2, text_y, font_size, BLACK);
   DrawText(hp_text, text_x, text_y - 2, font_size, BLACK);
@@ -293,6 +299,16 @@ void update_draw(void) {
   UpdateMusicStream(upbeat_music);
   SetMusicVolume(upbeat_music, 0.1f);
 
+  if (phase == TURN_TRANSITION_TO_PLAYER || phase == TURN_TRANSITION_TO_ENEMY) {
+    if (turn_transition_start_time > 0) {
+      double elapsed = GetTime() - turn_transition_start_time;
+      if (elapsed >= TURN_TRANSITION_DURATION) {
+        phase = phase == TURN_TRANSITION_TO_PLAYER ? PLAYER_TURN : ENEMY_TURN;
+        turn_transition_start_time = 0.0f;
+      }
+    }
+  }
+
   switch (player_action) {
   case IDLE: {
   } break;
@@ -300,7 +316,6 @@ void update_draw(void) {
     double elapsed = GetTime() - player_attack_start_time;
     int frame = (int)(elapsed * 15);
     if (!player_hit_applied && frame == 3) {
-      printf("%i\n", frame);
       enemy_damage_start_time = GetTime();
       enemy_action = HURT;
       PlaySound(punch_sound);
@@ -317,7 +332,7 @@ void update_draw(void) {
     if (frame >= 6) {
       player_action = IDLE;
       // (TODO) Should maybe be player turn end
-      phase = ENEMY_TURN;
+      // phase = TURN_TRANSITION_TO_ENEMY;
     }
   } break;
   case HURT: {
@@ -353,7 +368,8 @@ void update_draw(void) {
 
     if (frame >= frames) {
       enemy_action = IDLE;
-      phase = PLAYER_TURN;
+      phase = TURN_TRANSITION_TO_PLAYER;
+      turn_transition_start_time = GetTime();
     }
   } break;
   case IDLE: {
@@ -365,8 +381,8 @@ void update_draw(void) {
     int frame = (int)(elapsed * fps);
     if (frame >= frames) {
       enemy_action = IDLE;
-      // frame = frames - 1;
-      // phase = ENEMY_TURN;
+      phase = TURN_TRANSITION_TO_ENEMY;
+      turn_transition_start_time = GetTime();
     }
   } break;
   }
@@ -374,7 +390,6 @@ void update_draw(void) {
   if (phase == ENEMY_TURN) {
     if (enemy_action != ATTACK) {
       enemy_action = ATTACK;
-      phase = ENEMY_ACTION_RESOLVE;
       enemy_attack_start_time = GetTime();
       enemy_hit_applied = false;
     }
@@ -466,7 +481,6 @@ void update_draw(void) {
     valid_word = false;
 
     player_action = ATTACK;
-    // phase = PLAYER_ACTION_RESOLVE;
     player_attack_start_time = GetTime();
     player_hit_applied = false;
   }
@@ -621,6 +635,29 @@ draw:
                               dest.y + dest.height + 8, 80, 6};
     draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
   } break;
+  }
+
+  // (MAYBE) player text should appear at max text size with low opacity and
+  // become more opaque as time goes on
+  // (TODO) maybe start with the text transparent then make it more opaque
+  if (phase == TURN_TRANSITION_TO_ENEMY || phase == TURN_TRANSITION_TO_PLAYER) {
+    const char *text =
+        (phase == TURN_TRANSITION_TO_PLAYER) ? "Player Turn" : "Enemy Turn";
+    double elapsed = GetTime() - turn_transition_start_time;
+    float t = elapsed / TURN_TRANSITION_DURATION;
+    if (t >= 1.0f) {
+      t = 1.0f;
+    }
+
+    float ease_out = 1.0f - (1.0f - t) * (1.0f - t);
+    uint8_t start_size = 50;
+    uint8_t end_size = 30;
+    const int font_size = start_size + ((end_size - start_size) * ease_out);
+    const int text_width = MeasureText(text, font_size);
+    const int x = (GetScreenWidth() / 2.0f) - (text_width / 2.0f);
+    const int y = (GetScreenHeight() / 3.0f);
+
+    DrawText(text, x, y, font_size, WHITE);
   }
 
   EndDrawing();
