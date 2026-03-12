@@ -46,6 +46,13 @@ typedef struct {
 // (TODO) Think of a better name
 typedef enum { IDLE, ATTACK, HURT } Action;
 
+typedef enum {
+  PLAYER_TURN,
+  PLAYER_ACTION_RESOLVE,
+  ENEMY_TURN,
+  ENEMY_ACTION_RESOLVE
+} Phase;
+
 //----------------------------------------------------------------------------------
 // State
 //----------------------------------------------------------------------------------
@@ -74,8 +81,10 @@ Texture2D background;
 Texture2D mushroom_idle;
 Texture2D mushroom_hit;
 Texture2D mushroom_attack;
+
 Texture2D knight_idle;
 Texture2D knight_attack;
+Texture2D knight_hurt;
 
 Sound punch_sound;
 Sound keystroke_sound;
@@ -86,11 +95,17 @@ Music upbeat_music;
 Action enemy_action = IDLE;
 Action player_action = IDLE;
 
-bool player_turn = true;
-bool player_attack = false;
-float player_attack_start_time = 0.0f;
+Phase phase = PLAYER_TURN;
+
 int player_pending_damage = 0;
+float player_attack_start_time = 0.0f;
+// start time for animation
+float player_damage_start_time = 0.0f;
+bool player_hit_applied = false;
+
+float enemy_attack_start_time = 0.0f;
 float enemy_damage_start_time = 0.0f;
+bool enemy_hit_applied = false;
 
 // UI
 const uint8_t padding = 3;
@@ -278,36 +293,98 @@ void update_draw(void) {
   UpdateMusicStream(upbeat_music);
   SetMusicVolume(upbeat_music, 0.1f);
 
-  // if (selection_length >= enemy.health_points) {
-  //   enemy.health_points = 0;
-  // } else {
-  //   enemy.health_points -= selection_length;
-  // }
-  // PlaySound(punch_sound);
+  switch (player_action) {
+  case IDLE: {
+  } break;
+  case ATTACK: {
+    double elapsed = GetTime() - player_attack_start_time;
+    int frame = (int)(elapsed * 15);
+    if (!player_hit_applied && frame == 3) {
+      printf("%i\n", frame);
+      enemy_damage_start_time = GetTime();
+      enemy_action = HURT;
+      PlaySound(punch_sound);
+      player_hit_applied = true;
 
-  // if (player_pending_damage > 0 && current_player_frame == 4) {
-  //   PlaySound(punch_sound);
-  //   if (player_pending_damage >= enemy.health_points) {
-  //     enemy.health_points = 0;
-  //   } else {
-  //     enemy.health_points -= player_pending_damage;
-  //   }
-  //   player_pending_damage = 0;
-  // }
+      if (player_pending_damage >= enemy.health_points) {
+        enemy.health_points = 0;
+      } else {
+        enemy.health_points -= player_pending_damage;
+      }
+      player_pending_damage = 0;
+    }
 
-  if (!player_turn) {
-    // int damage = rand() % 5;
-    // if (damage >= player.health_points) {
-    //   player.health_points = 0;
-    // } else {
-    //   player.health_points -= damage;
-    // }
-    player_turn = true;
+    if (frame >= 6) {
+      player_action = IDLE;
+      // (TODO) Should maybe be player turn end
+      phase = ENEMY_TURN;
+    }
+  } break;
+  case HURT: {
+    double elapsed = GetTime() - player_damage_start_time;
+    int frame = (int)(elapsed * 15);
+    if (frame >= 4) {
+      player_action = IDLE;
+    }
+  } break;
+  }
+
+  switch (enemy_action) {
+  case ATTACK: {
+    const int frames = 9;
+    float fps = 10.0f;
+    float elapsed = GetTime() - enemy_attack_start_time;
+    int frame = (int)(elapsed * fps);
+    if (!enemy_hit_applied && frame == 6) {
+      // (TODO) I should probably play the damage sound when the target is hit?
+      // I could even pass a sound effect to it if i wanted it to be different
+      // based on the players attack
+      PlaySound(punch_sound);
+      player_action = HURT;
+      enemy_hit_applied = true;
+      int damage = rand() % 5;
+      if (damage >= player.health_points) {
+        player.health_points = 0;
+      } else {
+        player.health_points -= damage;
+      }
+    }
+
+    if (frame >= frames) {
+      enemy_action = IDLE;
+      phase = PLAYER_TURN;
+    }
+  } break;
+  case IDLE: {
+  } break;
+  case HURT: {
+    const int frames = 5;
+    const float fps = 15.0f;
+    float elapsed = GetTime() - enemy_damage_start_time;
+    int frame = (int)(elapsed * fps);
+    if (frame >= frames) {
+      enemy_action = IDLE;
+      // frame = frames - 1;
+      // phase = ENEMY_TURN;
+    }
+  } break;
+  }
+
+  if (phase == ENEMY_TURN) {
+    if (enemy_action != ATTACK) {
+      enemy_action = ATTACK;
+      phase = ENEMY_ACTION_RESOLVE;
+      enemy_attack_start_time = GetTime();
+      enemy_hit_applied = false;
+    }
     goto draw;
   }
 
-  if (player_turn && !IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-    // i wonder if this goto is sus
+  if (phase != PLAYER_TURN) {
+    goto draw;
+  }
+
+  if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
     goto draw;
   }
 
@@ -381,24 +458,16 @@ void update_draw(void) {
              letter_bag.tiles[letter_bag.remaining].tile_value);
     };
 
-    // deal damage to enemy
-    // if (selection_length >= enemy.health_points) {
-    //   enemy.health_points = 0;
-    // } else {
-    //   enemy.health_points -= selection_length;
-    // }
-    // PlaySound(punch_sound);
-
     player_pending_damage = selection_length;
 
     selection_length = 0;
     selected_word[0] = '\0';
     valid_word = false;
 
-    // player_attack = true;
     player_action = ATTACK;
+    // phase = PLAYER_ACTION_RESOLVE;
     player_attack_start_time = GetTime();
-    player_turn = false;
+    player_hit_applied = false;
   }
 
   // (TODO) Right click should clear selection
@@ -441,30 +510,19 @@ draw:
     const int frame_width = 60;
     const int frame_height = 36;
     const int frame_count = 6;
-    const float fps = 18.0f;
+    const float fps = 15.0f;
     float elapsed = GetTime() - player_attack_start_time;
     int frame = (int)(elapsed * fps);
-    if (frame == 4) {
-      enemy_damage_start_time = GetTime();
-      enemy_action = HURT;
-      PlaySound(punch_sound);
-      if (player_pending_damage >= enemy.health_points) {
-        enemy.health_points = 0;
-      } else {
-        enemy.health_points -= player_pending_damage;
-      }
-      player_pending_damage = 0;
-    }
-    if (frame >= frame_count) {
-      player_action = IDLE;
-      frame = frame_count - 1;
-    }
     float dest_w = frame_width * scale;
     float dest_h = frame_height * scale;
     float ground_y = board_origin_y - 10;
-    Rectangle player = {100 - dest_w / 2.0f, ground_y - dest_h, dest_w, dest_h};
+    Rectangle dest = {100 - dest_w / 2.0f, ground_y - dest_h, dest_w, dest_h};
     Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
-    DrawTexturePro(knight_attack, src, player, (Vector2){0, 0}, 0, WHITE);
+    DrawTexturePro(knight_attack, src, dest, (Vector2){0, 0}, 0, WHITE);
+    Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
+                               dest.y + dest.height + 8, 80, 6};
+    draw_health_bar(player_health, player.health_points,
+                    player.max_health_points);
   } break;
   case IDLE: {
     const int frame_width = 32;
@@ -485,11 +543,46 @@ draw:
                     player.max_health_points);
   } break;
   case HURT: {
+    const int frame_width = 32;
+    const int frame_height = 36;
+    const int frames = 4;
+    const float fps = 15.0f;
+    float elapsed = GetTime() - player_damage_start_time;
+    int frame = (int)(elapsed * fps);
+    Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
+    float dest_w = frame_width * scale;
+    float dest_h = frame_height * scale;
+    float ground_y = board_origin_y - 10;
+    float center_x = 100;
+    Rectangle dest = {100 - frame_width * scale / 2.0f, ground_y - dest_h,
+                      dest_w, dest_h};
+    DrawTexturePro(knight_hurt, src, dest, (Vector2){0, 0}, 0, WHITE);
+    Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
+                               dest.y + dest.height + 8, 80, 6};
+    draw_health_bar(player_health, player.health_points,
+                    player.max_health_points);
   } break;
   }
 
   switch (enemy_action) {
   case ATTACK: {
+    const int frame_width = 38;
+    const int frame_height = 32;
+    const int frames = 9;
+    float fps = 10.0f;
+    float elapsed = GetTime() - enemy_attack_start_time;
+    int frame = (int)(elapsed * fps);
+    Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
+    float dest_w = frame_width * scale;
+    float dest_h = frame_height * scale;
+    float ground_y = board_origin_y - 10;
+    float center_x = GetScreenWidth() - 100;
+    Rectangle dest = {center_x - dest_w / 2.0f, ground_y - dest_h, dest_w,
+                      dest_h};
+    DrawTexturePro(mushroom_attack, src, dest, (Vector2){0, 0}, 0, WHITE);
+    Rectangle enemy_health = {dest.x + (dest.width - 80) / 2.0f,
+                              dest.y + dest.height + 8, 80, 6};
+    draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
   } break;
   case IDLE: {
     const int frame_width = 80;
@@ -501,11 +594,11 @@ draw:
     float dest_h = frame_height * scale;
     float ground_y = board_origin_y - 10;
     float center_x = GetScreenWidth() - 100;
-    Rectangle enemy_sprite = {center_x - dest_w / 2.0f, ground_y - dest_h,
-                              dest_w, dest_h};
-    DrawTexturePro(mushroom_idle, src, enemy_sprite, (Vector2){0, 0}, 0, WHITE);
-    Rectangle enemy_health = {enemy_sprite.x + (enemy_sprite.width - 80) / 2.0f,
-                              enemy_sprite.y + enemy_sprite.height + 8, 80, 6};
+    Rectangle dest = {center_x - dest_w / 2.0f, ground_y - dest_h, dest_w,
+                      dest_h};
+    DrawTexturePro(mushroom_idle, src, dest, (Vector2){0, 0}, 0, WHITE);
+    Rectangle enemy_health = {dest.x + (dest.width - 80) / 2.0f,
+                              dest.y + dest.height + 8, 80, 6};
     draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
   } break;
   case HURT: {
@@ -515,10 +608,6 @@ draw:
     const float fps = 15.0f;
     float elapsed = GetTime() - enemy_damage_start_time;
     int frame = (int)(elapsed * fps);
-    if (frame >= frames) {
-      enemy_action = IDLE;
-      frame = frames - 1;
-    }
     Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
     float dest_w = frame_width * scale;
     float dest_h = frame_height * scale;
@@ -552,6 +641,7 @@ int main(int argc, char *argv[]) {
 
   knight_idle = LoadTexture("assets/knight/IDLE.png");
   knight_attack = LoadTexture("assets/knight/attack-1.png");
+  knight_hurt = LoadTexture("assets/knight/hurt1.png");
 
   background = LoadTexture("assets/background.png");
 
