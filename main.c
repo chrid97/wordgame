@@ -342,6 +342,7 @@ void update_draw(void) {
       PlaySound(punch_sound);
       player_action = HURT;
       enemy_hit_applied = true;
+      player_damage_start_time = GetTime();
       int damage = rand() % 5;
       if (damage >= player.health_points) {
         player.health_points = 0;
