@@ -55,7 +55,7 @@ typedef struct {
 } Animation;
 
 // (TODO) Think of a better name
-typedef enum { IDLE, ATTACK, HURT } Action;
+typedef enum { IDLE, ATTACK, HURT, DEATH } Action;
 
 typedef enum {
   TURN_TRANSITION_TO_PLAYER,
@@ -94,10 +94,12 @@ Texture2D background;
 Animation mushroom_idle;
 Animation mushroom_hurt;
 Animation mushroom_attack;
+Animation mushroom_death;
 
 Animation knight_idle;
 Animation knight_attack;
 Animation knight_hurt;
+Animation knight_death;
 
 Sound punch_sound;
 Sound keystroke_sound;
@@ -112,15 +114,18 @@ Phase phase = TURN_TRANSITION_TO_PLAYER;
 
 int player_pending_damage = 0;
 float player_attack_start_time = 0.0f;
-// start time for animation
 float player_damage_start_time = 0.0f;
+float player_death_start_time = -1.0f;
 bool player_hit_applied = false;
 
 float enemy_attack_start_time = 0.0f;
 float enemy_damage_start_time = 0.0f;
+float enemy_death_start_time = 0.0f;
 bool enemy_hit_applied = false;
 
 float turn_transition_start_time = 1.0f;
+Entity player = {.health_points = 20, .max_health_points = 20};
+Entity enemy = {.health_points = 12, .max_health_points = 12};
 
 // UI
 const uint8_t padding = 3;
@@ -267,7 +272,14 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
 }
 
 void draw_animation(Animation anim, float t, Rectangle dest) {
-  uint8_t frame = (t * anim.fps);
+  int frame = (int)(t * anim.fps);
+
+  if (anim.looping) {
+    frame %= anim.frame_count;
+  } else if (frame >= anim.frame_count) {
+    frame = anim.frame_count - 1;
+  }
+
   Rectangle src = {frame * anim.frame_width, 0, anim.frame_width,
                    anim.frame_height};
 
@@ -306,15 +318,23 @@ void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
   DrawText(hp_text, text_x, text_y, font_size, WHITE);
 }
 
-Entity player = {.health_points = 20, .max_health_points = 20};
-Entity enemy = {.health_points = 20, .max_health_points = 20};
-
 void update_draw(void) {
   //----------------------------------------------------------------------------------
   // Update
   //----------------------------------------------------------------------------------
   UpdateMusicStream(upbeat_music);
-  SetMusicVolume(upbeat_music, 0.1f);
+  SetMusicVolume(upbeat_music, 0.05f);
+  SetSoundVolume(punch_sound, 0.1f);
+
+  if (enemy.health_points == 0 && enemy_action != DEATH) {
+    enemy_action = DEATH;
+    enemy_death_start_time = GetTime();
+  }
+
+  if (player.health_points == 0 && player_action != DEATH) {
+    player_action = DEATH;
+    player_death_start_time = GetTime();
+  }
 
   if (phase == TURN_TRANSITION_TO_PLAYER || phase == TURN_TRANSITION_TO_ENEMY) {
     if (turn_transition_start_time > 0) {
@@ -375,7 +395,8 @@ void update_draw(void) {
       player_action = HURT;
       enemy_hit_applied = true;
       player_damage_start_time = GetTime();
-      int damage = rand() % 5;
+      // int damage = rand() % 5;
+      int damage = 20;
       if (damage >= player.health_points) {
         player.health_points = 0;
       } else {
@@ -401,6 +422,8 @@ void update_draw(void) {
       phase = TURN_TRANSITION_TO_ENEMY;
       turn_transition_start_time = GetTime();
     }
+  } break;
+  case DEATH: {
   } break;
   }
 
@@ -552,6 +575,10 @@ draw:
     player_anim = knight_hurt;
     player_time = GetTime() - player_damage_start_time;
   } break;
+  case DEATH: {
+    player_anim = knight_death;
+    player_time = GetTime() - player_death_start_time;
+  } break;
   }
 
   const float scale = 2.5f;
@@ -573,15 +600,17 @@ draw:
     enemy_anim = mushroom_attack;
     enemy_time = GetTime() - enemy_attack_start_time;
   } break;
-
   case IDLE: {
     enemy_anim = mushroom_idle;
     enemy_time = GetTime();
   } break;
-
   case HURT: {
     enemy_anim = mushroom_hurt;
     enemy_time = GetTime() - enemy_damage_start_time;
+  } break;
+  case DEATH: {
+    enemy_anim = mushroom_death;
+    enemy_time = GetTime() - enemy_death_start_time;
   } break;
   }
 
@@ -646,6 +675,13 @@ int main(int argc, char *argv[]) {
                   false};
   mushroom_hurt = (Animation){
       LoadTexture("assets/mushroom/mushroom-hit.png"), 32, 32, 5, 15.0f, false};
+  mushroom_death =
+      (Animation){LoadTexture("assets/mushroom/mushroom-death.png"),
+                  53,
+                  37,
+                  15,
+                  15.0f,
+                  false};
 
   knight_idle =
       (Animation){LoadTexture("assets/knight/IDLE.png"), 32, 37, 7, 7.5, true};
@@ -653,6 +689,8 @@ int main(int argc, char *argv[]) {
       LoadTexture("assets/knight/attack-1.png"), 60, 36, 6, 15.0f, false};
   knight_hurt = (Animation){
       LoadTexture("assets/knight/hurt1.png"), 32, 36, 4, 15.0f, false};
+  knight_death = (Animation){
+      LoadTexture("assets/knight/knight-death.png"), 46, 35, 12, 10.0f, false};
 
   background = LoadTexture("assets/background.png");
 
