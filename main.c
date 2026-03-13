@@ -45,6 +45,15 @@ typedef struct {
   uint8_t size; // total number of tiles
 } LetterBag;
 
+typedef struct {
+  Texture2D texture;
+  int frame_width;
+  int frame_height;
+  int frame_count;
+  float fps;
+  bool looping;
+} Animation;
+
 // (TODO) Think of a better name
 typedef enum { IDLE, ATTACK, HURT } Action;
 
@@ -82,13 +91,13 @@ Texture2D tile_texture;
 Texture2D letter_textures[LETTER_COUNT] = {0};
 Texture2D background;
 
-Texture2D mushroom_idle;
-Texture2D mushroom_hit;
-Texture2D mushroom_attack;
+Animation mushroom_idle;
+Animation mushroom_hurt;
+Animation mushroom_attack;
 
-Texture2D knight_idle;
-Texture2D knight_attack;
-Texture2D knight_hurt;
+Animation knight_idle;
+Animation knight_attack;
+Animation knight_hurt;
 
 Sound punch_sound;
 Sound keystroke_sound;
@@ -257,6 +266,14 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   DrawTexture(letter_tex, (int)x, (int)y, tint);
 }
 
+void draw_animation(Animation anim, float t, Rectangle dest) {
+  uint8_t frame = (t * anim.fps);
+  Rectangle src = {frame * anim.frame_width, 0, anim.frame_width,
+                   anim.frame_height};
+
+  DrawTexturePro(anim.texture, src, dest, (Vector2){0, 0}, 0, WHITE);
+}
+
 void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
   DrawRectangleRec(bar, GRAY);
   DrawRectangleRoundedLinesEx(bar, 100, 4, 1, BLACK);
@@ -351,9 +368,9 @@ void update_draw(void) {
     float elapsed = GetTime() - enemy_attack_start_time;
     int frame = (int)(elapsed * fps);
     if (!enemy_hit_applied && frame == 6) {
-      // (TODO) I should probably play the damage sound when the target is hit?
-      // I could even pass a sound effect to it if i wanted it to be different
-      // based on the players attack
+      // (TODO) I should probably play the damage sound when the target is
+      // hit? I could even pass a sound effect to it if i wanted it to be
+      // different based on the players attack
       PlaySound(punch_sound);
       player_action = HURT;
       enemy_hit_applied = true;
@@ -396,7 +413,7 @@ void update_draw(void) {
     goto draw;
   }
 
-  if (phase != PLAYER_TURN) {
+  if (phase != PLAYER_TURN && phase != TURN_TRANSITION_TO_PLAYER) {
     goto draw;
   }
 
@@ -520,124 +537,67 @@ draw:
   DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
 
   // (TODO) draw shadows under sprites
-  const float scale = 2.5f;
+  Animation player_anim = {0};
+  float player_time = 0;
   switch (player_action) {
   case ATTACK: {
-    const int frame_width = 60;
-    const int frame_height = 36;
-    const int frame_count = 6;
-    const float fps = 15.0f;
-    float elapsed = GetTime() - player_attack_start_time;
-    int frame = (int)(elapsed * fps);
-    float dest_w = frame_width * scale;
-    float dest_h = frame_height * scale;
-    float ground_y = board_origin_y - 10;
-    Rectangle dest = {100 - dest_w / 2.0f, ground_y - dest_h, dest_w, dest_h};
-    Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
-    DrawTexturePro(knight_attack, src, dest, (Vector2){0, 0}, 0, WHITE);
-
-    Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
-                               dest.y + dest.height + 8, 80, 6};
-    draw_health_bar(player_health, player.health_points,
-                    player.max_health_points);
+    player_anim = knight_attack;
+    player_time = GetTime() - player_attack_start_time;
   } break;
   case IDLE: {
-    const int frame_width = 32;
-    const int frame_height = 37;
-    const int frame_count = knight_idle.width / frame_width;
-    int current_frame = ((int)(GetTime() * 7.5f)) % frame_count;
-    Rectangle src = {current_frame * frame_width, 0, frame_width, frame_height};
-    float dest_w = frame_width * scale;
-    float dest_h = frame_height * scale;
-    float ground_y = board_origin_y - 10;
-    float center_x = 100;
-    Rectangle dest = {100 - frame_width * scale / 2.0f, ground_y - dest_h,
-                      dest_w, dest_h};
-    DrawTexturePro(knight_idle, src, dest, (Vector2){0, 0}, 0, WHITE);
-    Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
-                               dest.y + dest.height + 8, 80, 6};
-    draw_health_bar(player_health, player.health_points,
-                    player.max_health_points);
+    player_anim = knight_idle;
+    player_time = GetTime();
   } break;
   case HURT: {
-    const int frame_width = 32;
-    const int frame_height = 36;
-    const int frames = 4;
-    const float fps = 15.0f;
-    float elapsed = GetTime() - player_damage_start_time;
-    int frame = (int)(elapsed * fps);
-    Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
-    float dest_w = frame_width * scale;
-    float dest_h = frame_height * scale;
-    float ground_y = board_origin_y - 10;
-    float center_x = 100;
-    Rectangle dest = {100 - frame_width * scale / 2.0f, ground_y - dest_h,
-                      dest_w, dest_h};
-    DrawTexturePro(knight_hurt, src, dest, (Vector2){0, 0}, 0, WHITE);
-    Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
-                               dest.y + dest.height + 8, 80, 6};
-    draw_health_bar(player_health, player.health_points,
-                    player.max_health_points);
+    player_anim = knight_hurt;
+    player_time = GetTime() - player_damage_start_time;
   } break;
   }
 
+  const float scale = 2.5f;
+  float ground_y = board_origin_y - 10;
+  float dest_w = player_anim.frame_width * scale;
+  float dest_h = player_anim.frame_height * scale;
+  Rectangle dest = {100 - (dest_w / 2.0f), ground_y - dest_h, dest_w, dest_h};
+  draw_animation(player_anim, player_time, dest);
+
+  Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
+                             dest.y + dest.height + 6, 80, 6};
+  draw_health_bar(player_health, player.health_points,
+                  player.max_health_points);
+
+  Animation enemy_anim = {0};
+  float enemy_time = 0;
   switch (enemy_action) {
   case ATTACK: {
-    const int frame_width = 38;
-    const int frame_height = 32;
-    const int frames = 9;
-    float fps = 10.0f;
-    float elapsed = GetTime() - enemy_attack_start_time;
-    int frame = (int)(elapsed * fps);
-    Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
-    float dest_w = frame_width * scale;
-    float dest_h = frame_height * scale;
-    float ground_y = board_origin_y - 10;
-    float center_x = GetScreenWidth() - 100;
-    Rectangle dest = {center_x - dest_w / 2.0f, ground_y - dest_h, dest_w,
-                      dest_h};
-    DrawTexturePro(mushroom_attack, src, dest, (Vector2){0, 0}, 0, WHITE);
-    Rectangle enemy_health = {dest.x + (dest.width - 80) / 2.0f,
-                              dest.y + dest.height + 8, 80, 6};
-    draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
+    enemy_anim = mushroom_attack;
+    enemy_time = GetTime() - enemy_attack_start_time;
   } break;
+
   case IDLE: {
-    const int frame_width = 80;
-    const int frame_height = 64;
-    const int frames = 7;
-    int frame = ((int)(GetTime() * 8.0f)) % frames;
-    Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
-    float dest_w = frame_width * scale;
-    float dest_h = frame_height * scale;
-    float ground_y = board_origin_y - 10;
-    float center_x = GetScreenWidth() - 100;
-    Rectangle dest = {center_x - dest_w / 2.0f, ground_y - dest_h, dest_w,
-                      dest_h};
-    DrawTexturePro(mushroom_idle, src, dest, (Vector2){0, 0}, 0, WHITE);
-    Rectangle enemy_health = {dest.x + (dest.width - 80) / 2.0f,
-                              dest.y + dest.height + 8, 80, 6};
-    draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
+    enemy_anim = mushroom_idle;
+    enemy_time = GetTime();
   } break;
+
   case HURT: {
-    const int frame_width = 32;
-    const int frame_height = 32;
-    const int frames = 5;
-    const float fps = 15.0f;
-    float elapsed = GetTime() - enemy_damage_start_time;
-    int frame = (int)(elapsed * fps);
-    Rectangle src = {frame * frame_width, 0, frame_width, frame_height};
-    float dest_w = frame_width * scale;
-    float dest_h = frame_height * scale;
-    float ground_y = board_origin_y - 10;
-    float center_x = GetScreenWidth() - 100;
-    Rectangle dest = {center_x - dest_w / 2.0f, ground_y - dest_h, dest_w,
-                      dest_h};
-    DrawTexturePro(mushroom_hit, src, dest, (Vector2){0, 0}, 0, WHITE);
-    Rectangle enemy_health = {dest.x + (dest.width - 80) / 2.0f,
-                              dest.y + dest.height + 8, 80, 6};
-    draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
+    enemy_anim = mushroom_hurt;
+    enemy_time = GetTime() - enemy_damage_start_time;
   } break;
   }
+
+  float enemy_anchor_x = GetScreenWidth() - 100;
+  float enemy_dest_w = enemy_anim.frame_width * scale;
+  float enemy_dest_h = enemy_anim.frame_height * scale;
+
+  Rectangle enemy_dest = {enemy_anchor_x - enemy_dest_w / 2.0f,
+                          ground_y - enemy_dest_h, enemy_dest_w, enemy_dest_h};
+
+  draw_animation(enemy_anim, enemy_time, enemy_dest);
+
+  Rectangle enemy_health = {enemy_anchor_x - 40.0f,
+                            enemy_dest.y + enemy_dest.height + 8, 80, 6};
+
+  draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
 
   // (MAYBE) player text should appear at max text size with low opacity and
   // become more opaque as time goes on
@@ -675,13 +635,24 @@ int main(int argc, char *argv[]) {
   backspace_sound = LoadSound("assets/Backspace1.wav");
   upbeat_music = LoadMusicStream("assets/upbeat_bg.wav");
 
-  mushroom_idle = LoadTexture("assets/mushroom/Mushroom-Idle.png");
-  mushroom_hit = LoadTexture("assets/mushroom/mushroom-hit.png");
-  mushroom_attack = LoadTexture("assets/mushroom/mushroom-attack1.png");
+  mushroom_idle = (Animation){
+      LoadTexture("assets/mushroom/Mushroom-Idle.png"), 80, 64, 7, 8.0f, true};
+  mushroom_attack =
+      (Animation){LoadTexture("assets/mushroom/mushroom-attack1.png"),
+                  38,
+                  32,
+                  9,
+                  10.0f,
+                  false};
+  mushroom_hurt = (Animation){
+      LoadTexture("assets/mushroom/mushroom-hit.png"), 32, 32, 5, 15.0f, false};
 
-  knight_idle = LoadTexture("assets/knight/IDLE.png");
-  knight_attack = LoadTexture("assets/knight/attack-1.png");
-  knight_hurt = LoadTexture("assets/knight/hurt1.png");
+  knight_idle =
+      (Animation){LoadTexture("assets/knight/IDLE.png"), 32, 37, 7, 7.5, true};
+  knight_attack = (Animation){
+      LoadTexture("assets/knight/attack-1.png"), 60, 36, 6, 15.0f, false};
+  knight_hurt = (Animation){
+      LoadTexture("assets/knight/hurt1.png"), 32, 36, 4, 15.0f, false};
 
   background = LoadTexture("assets/background.png");
 
