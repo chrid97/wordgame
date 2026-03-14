@@ -37,6 +37,11 @@ typedef struct {
 
   uint8_t max_health_points;
   uint8_t health_points;
+
+  // tile modifiers
+  // uint8_t modifiers;
+
+  bool poisioned;
 } Entity;
 
 typedef struct {
@@ -126,6 +131,8 @@ bool enemy_hit_applied = false;
 float turn_transition_start_time = 1.0f;
 Entity player = {.health_points = 20, .max_health_points = 20};
 Entity enemy = {.health_points = 12, .max_health_points = 12};
+
+Entity enemies[30] = {};
 
 // UI
 const uint8_t padding = 3;
@@ -261,6 +268,9 @@ void load_words() {
 
 void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   Color tint = selected ? GRAY : WHITE;
+  if (letter_bag.tiles[tile_idx].poisioned) {
+    tint = GREEN;
+  }
   DrawTexture(tile_texture, rect.x, rect.y, tint);
 
   char tile_value = letter_bag.tiles[tile_idx].tile_value;
@@ -331,10 +341,10 @@ void update_draw(void) {
     enemy_death_start_time = GetTime();
   }
 
-  if (player.health_points == 0 && player_action != DEATH) {
-    player_action = DEATH;
-    player_death_start_time = GetTime();
-  }
+  // if (player.health_points == 0 && player_action != DEATH) {
+  //   player_action = DEATH;
+  //   player_death_start_time = GetTime();
+  // }
 
   if (phase == TURN_TRANSITION_TO_PLAYER || phase == TURN_TRANSITION_TO_ENEMY) {
     if (turn_transition_start_time > 0) {
@@ -373,15 +383,22 @@ void update_draw(void) {
     }
   } break;
   case HURT: {
+    PlaySound(punch_sound);
     double elapsed = GetTime() - player_damage_start_time;
     int frame = (int)(elapsed * 15);
     if (frame >= 4) {
       player_action = IDLE;
     }
+    // todo rpobably a better way to do this
+    if (player.health_points == 0 && player_action != DEATH) {
+      player_action = DEATH;
+      player_death_start_time = GetTime();
+    }
   } break;
   }
 
   switch (enemy_action) {
+    // enemy attack
   case ATTACK: {
     const int frames = 9;
     float fps = 10.0f;
@@ -391,16 +408,23 @@ void update_draw(void) {
       // (TODO) I should probably play the damage sound when the target is
       // hit? I could even pass a sound effect to it if i wanted it to be
       // different based on the players attack
-      PlaySound(punch_sound);
+      // PlaySound(punch_sound);
       player_action = HURT;
       enemy_hit_applied = true;
       player_damage_start_time = GetTime();
-      // int damage = rand() % 5;
-      int damage = 20;
+      int damage = (rand() % 5) + 4;
       if (damage >= player.health_points) {
         player.health_points = 0;
       } else {
         player.health_points -= damage;
+      }
+
+      if (rand() % 2 % 2 == 0) {
+        const int board_pos = rand() % 16;
+        // (THINKING) maybe this should be a property on the player?
+        for (int i = 0; i < BOARD_COUNT; i++) {
+          letter_bag.tiles[board[board_pos]].poisioned = true;
+        }
       }
     }
 
@@ -537,6 +561,7 @@ draw:
   Rectangle background_dest = {0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT};
   DrawTexturePro(background, src, background_dest, (Vector2){0, 0}, 0, WHITE);
 
+  // draw board
   for (int i = 0; i < BOARD_COUNT; i++) {
     const uint8_t row = i / BOARD_ROW;
     const uint8_t col = i % BOARD_COL;
@@ -715,6 +740,9 @@ int main(int argc, char *argv[]) {
     board[i] = letter_bag.remaining;
     letter_bag.remaining--;
   }
+
+  // enemies[0] = enemy;
+  // enemies[1] = (Entity){.health_points = 12, .max_health_points = 12};
 #ifdef PLATFORM_WEB
   emscripten_set_main_loop(update_draw, 0, 1);
 #else
