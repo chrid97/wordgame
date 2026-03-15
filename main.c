@@ -27,28 +27,6 @@
 //----------------------------------------------------------------------------------
 // Types
 //----------------------------------------------------------------------------------
-typedef enum { TILE } EntityType;
-typedef struct {
-  EntityType type;
-  Vector2 position;
-  int width;
-  int height;
-  char tile_value;
-
-  uint8_t max_health_points;
-  uint8_t health_points;
-
-  // tile modifiers
-  // uint8_t modifiers;
-
-  bool poisioned;
-} Entity;
-
-typedef struct {
-  Entity tiles[LETTER_BAG_SIZE];
-  uint8_t remaining;
-  uint8_t size; // total number of tiles
-} LetterBag;
 
 typedef struct {
   Texture2D texture;
@@ -59,16 +37,45 @@ typedef struct {
   bool looping;
 } Animation;
 
-// (TODO) Think of a better name
-typedef enum { IDLE, ATTACK, HURT, DEATH } Action;
+typedef enum { IDLE, ATTACK, HURT, DEATH } EntityState;
+enum MonsterAbilityFlags {
+  POISONS,
+  SELF_DESTRUCT, // Explodes instead of attacking
+  LOCK_TILE,     // Locks player tile
+};
+// typedef enum { PLAYER, MUSHROOM, LOCK_AND_KEY, TILE } EntityType;
+typedef struct {
+  // EntityType type;
+  Vector2 position;
+  int width;
+  int height;
+  char tile_value;
+
+  uint8_t max_health_points;
+  uint8_t health_points;
+
+  EntityState state;
+  // tile modifiers
+  // uint8_t modifiers;
+
+  bool poisoned;
+  Animation animation;
+  Color tint;
+} Entity;
+
+typedef struct {
+  Entity tiles[LETTER_BAG_SIZE];
+  uint8_t remaining;
+  uint8_t size; // total number of tiles
+} LetterBag;
 
 typedef enum {
   TURN_TRANSITION_TO_PLAYER,
   PLAYER_TURN,
-  // PLAYER_ACTION_RESOLVE,
+  PLAYER_END_STEP,
   TURN_TRANSITION_TO_ENEMY,
   ENEMY_TURN,
-  // ENEMY_ACTION_RESOLVE
+  ENEMY_END_STEP,
 } Phase;
 
 //----------------------------------------------------------------------------------
@@ -112,14 +119,14 @@ Sound backspace_sound;
 
 Music upbeat_music;
 
-Action enemy_action = IDLE;
-Action player_action = IDLE;
+EntityState enemy_action = IDLE;
+EntityState player_action = IDLE;
 
 Phase phase = TURN_TRANSITION_TO_PLAYER;
 
 int player_pending_damage = 0;
 float player_attack_start_time = 0.0f;
-float player_damage_start_time = 0.0f;
+float player_damage_start_time = -1.0f;
 float player_death_start_time = -1.0f;
 bool player_hit_applied = false;
 
@@ -129,8 +136,9 @@ float enemy_death_start_time = 0.0f;
 bool enemy_hit_applied = false;
 
 float turn_transition_start_time = 1.0f;
-Entity player = {.health_points = 20, .max_health_points = 20};
+Entity player = {.health_points = 60, .max_health_points = 60, .tint = WHITE};
 Entity enemy = {.health_points = 12, .max_health_points = 12};
+int current_enemy = 0;
 
 Entity enemies[30] = {};
 
@@ -218,7 +226,7 @@ void init_letter_bag() {
   for (int letter = 0; letter < 26; letter++) {
     for (int j = 0; j < letter_occurrence[letter]; j++) {
       letter_bag.tiles[i++] = (Entity){
-          .type = TILE,
+          // .type = TILE,
           .position = {},
           .height = 50,
           .width = 50,
@@ -268,7 +276,7 @@ void load_words() {
 
 void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   Color tint = selected ? GRAY : WHITE;
-  if (letter_bag.tiles[tile_idx].poisioned) {
+  if (letter_bag.tiles[tile_idx].poisoned) {
     tint = GREEN;
   }
   DrawTexture(tile_texture, rect.x, rect.y, tint);
@@ -281,7 +289,7 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   DrawTexture(letter_tex, (int)x, (int)y, tint);
 }
 
-void draw_animation(Animation anim, float t, Rectangle dest) {
+void draw_animation(Animation anim, float t, Rectangle dest, Color tint) {
   int frame = (int)(t * anim.fps);
 
   if (anim.looping) {
@@ -293,7 +301,7 @@ void draw_animation(Animation anim, float t, Rectangle dest) {
   Rectangle src = {frame * anim.frame_width, 0, anim.frame_width,
                    anim.frame_height};
 
-  DrawTexturePro(anim.texture, src, dest, (Vector2){0, 0}, 0, WHITE);
+  DrawTexturePro(anim.texture, src, dest, (Vector2){0, 0}, 0, tint);
 }
 
 void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
@@ -336,6 +344,8 @@ void update_draw(void) {
   SetMusicVolume(upbeat_music, 0.05f);
   SetSoundVolume(punch_sound, 0.1f);
 
+  player.tint = WHITE;
+
   if (enemy.health_points == 0 && enemy_action != DEATH) {
     enemy_action = DEATH;
     enemy_death_start_time = GetTime();
@@ -346,7 +356,9 @@ void update_draw(void) {
   //   player_death_start_time = GetTime();
   // }
 
-  if (phase == TURN_TRANSITION_TO_PLAYER || phase == TURN_TRANSITION_TO_ENEMY) {
+  switch (phase) {
+  case TURN_TRANSITION_TO_ENEMY:
+  case TURN_TRANSITION_TO_PLAYER: {
     if (turn_transition_start_time > 0) {
       double elapsed = GetTime() - turn_transition_start_time;
       if (elapsed >= TURN_TRANSITION_DURATION) {
@@ -354,10 +366,47 @@ void update_draw(void) {
         turn_transition_start_time = 0.0f;
       }
     }
+  } break;
+  case PLAYER_TURN: {
+    // submit words
+  } break;
+  case PLAYER_END_STEP: {
+    // apply poison damage
+    uint8_t poison_count = 0;
+    for (int i = 0; i < BOARD_COUNT; i++) {
+      if (letter_bag.tiles[board[i]].poisoned) {
+        poison_count++;
+      }
+    }
+
+    if (poison_count == 0) {
+      phase = TURN_TRANSITION_TO_ENEMY;
+      break;
+    }
+
+    player_action = HURT;
+    player_damage_start_time = GetTime();
+    // (TODO) tint not working
+    player.tint = GREEN;
+    player.health_points -= poison_count * 2;
+    phase = TURN_TRANSITION_TO_ENEMY;
+  } break;
+  case ENEMY_TURN: {
+    if (enemy_action != ATTACK) {
+      enemy_action = ATTACK;
+      enemy_attack_start_time = GetTime();
+      enemy_hit_applied = false;
+    }
+  } break;
+  case ENEMY_END_STEP: {
+  } break;
   }
 
   switch (player_action) {
   case IDLE: {
+  } break;
+  case DEATH: {
+    // (TODO) GAME OVER
   } break;
   case ATTACK: {
     double elapsed = GetTime() - player_attack_start_time;
@@ -377,6 +426,9 @@ void update_draw(void) {
     }
 
     if (frame >= 6) {
+      if (phase == PLAYER_END_STEP) {
+        phase = TURN_TRANSITION_TO_ENEMY;
+      }
       player_action = IDLE;
       // (TODO) Should maybe be player turn end
       // phase = TURN_TRANSITION_TO_ENEMY;
@@ -388,6 +440,7 @@ void update_draw(void) {
     int frame = (int)(elapsed * 15);
     if (frame >= 4) {
       player_action = IDLE;
+      player_damage_start_time = -1.0f;
     }
     // todo rpobably a better way to do this
     if (player.health_points == 0 && player_action != DEATH) {
@@ -423,7 +476,7 @@ void update_draw(void) {
         const int board_pos = rand() % 16;
         // (THINKING) maybe this should be a property on the player?
         for (int i = 0; i < BOARD_COUNT; i++) {
-          letter_bag.tiles[board[board_pos]].poisioned = true;
+          letter_bag.tiles[board[board_pos]].poisoned = true;
         }
       }
     }
@@ -443,21 +496,15 @@ void update_draw(void) {
     int frame = (int)(elapsed * fps);
     if (frame >= frames) {
       enemy_action = IDLE;
-      phase = TURN_TRANSITION_TO_ENEMY;
+      phase = PLAYER_END_STEP;
       turn_transition_start_time = GetTime();
     }
   } break;
   case DEATH: {
-  } break;
-  }
+    current_enemy++;
+    enemy = enemies[current_enemy];
 
-  if (phase == ENEMY_TURN) {
-    if (enemy_action != ATTACK) {
-      enemy_action = ATTACK;
-      enemy_attack_start_time = GetTime();
-      enemy_hit_applied = false;
-    }
-    goto draw;
+  } break;
   }
 
   if (phase != PLAYER_TURN && phase != TURN_TRANSITION_TO_PLAYER) {
@@ -611,7 +658,7 @@ draw:
   float dest_w = player_anim.frame_width * scale;
   float dest_h = player_anim.frame_height * scale;
   Rectangle dest = {100 - (dest_w / 2.0f), ground_y - dest_h, dest_w, dest_h};
-  draw_animation(player_anim, player_time, dest);
+  draw_animation(player_anim, player_time, dest, player.tint);
 
   Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
                              dest.y + dest.height + 6, 80, 6};
@@ -646,7 +693,7 @@ draw:
   Rectangle enemy_dest = {enemy_anchor_x - enemy_dest_w / 2.0f,
                           ground_y - enemy_dest_h, enemy_dest_w, enemy_dest_h};
 
-  draw_animation(enemy_anim, enemy_time, enemy_dest);
+  draw_animation(enemy_anim, enemy_time, enemy_dest, WHITE);
 
   Rectangle enemy_health = {enemy_anchor_x - 40.0f,
                             enemy_dest.y + enemy_dest.height + 8, 80, 6};
@@ -741,8 +788,12 @@ int main(int argc, char *argv[]) {
     letter_bag.remaining--;
   }
 
-  // enemies[0] = enemy;
-  // enemies[1] = (Entity){.health_points = 12, .max_health_points = 12};
+  enemies[0] = enemy;
+  enemies[1] = (Entity){
+      .health_points = 30,
+      .max_health_points = 30,
+  };
+  enemies[2] = (Entity){.health_points = 60, .max_health_points = 60};
 #ifdef PLATFORM_WEB
   emscripten_set_main_loop(update_draw, 0, 1);
 #else
