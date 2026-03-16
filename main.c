@@ -23,6 +23,7 @@
 #define MAX_CHAR_SELECTION 10
 
 #define TURN_TRANSITION_DURATION 1.0f
+#define FLAG(N) (1u << N)
 
 //----------------------------------------------------------------------------------
 // Types
@@ -39,9 +40,9 @@ typedef struct {
 
 typedef enum { IDLE, ATTACK, HURT, DEATH } EntityState;
 enum MonsterAbilityFlags {
-  POISONS,
-  SELF_DESTRUCT, // Explodes instead of attacking
-  LOCK_TILE,     // Locks player tile
+  POISONS = FLAG(1),
+  SELF_DESTRUCT = FLAG(2), // Explodes instead of attacking
+  LOCK_TILE = FLAG(2),     // Locks player tile
 };
 // typedef enum { PLAYER, MUSHROOM, LOCK_AND_KEY, TILE } EntityType;
 typedef struct {
@@ -55,6 +56,7 @@ typedef struct {
   uint8_t health_points;
 
   EntityState state;
+  uint8_t abilities;
   // tile modifiers
   // uint8_t modifiers;
 
@@ -140,7 +142,18 @@ Entity player = {.health_points = 60, .max_health_points = 60, .tint = WHITE};
 Entity enemy = {.health_points = 12, .max_health_points = 12};
 int current_enemy = 0;
 
-Entity enemies[30] = {};
+Entity enemies[30] = {0};
+
+int current_encounter = 0;
+int encounter_length[] = {1, 1, 2};
+Entity encounter_table[] = {
+    // 1st encounter
+    {.health_points = 30, .max_health_points = 30, .abilities = POISONS},
+    // 2nd encounter
+    {.health_points = 60, .max_health_points = 60, .abilities = LOCK_TILE},
+    // 3rd encounter
+    {.health_points = 30, .max_health_points = 30, .abilities = POISONS},
+    {.health_points = 60, .max_health_points = 60, .abilities = LOCK_TILE}};
 
 // UI
 const uint8_t padding = 3;
@@ -451,34 +464,31 @@ void update_draw(void) {
   }
 
   switch (enemy_action) {
-    // enemy attack
   case ATTACK: {
     const int frames = 9;
     float fps = 10.0f;
     float elapsed = GetTime() - enemy_attack_start_time;
     int frame = (int)(elapsed * fps);
-    if (!enemy_hit_applied && frame == 6) {
-      // (TODO) I should probably play the damage sound when the target is
-      // hit? I could even pass a sound effect to it if i wanted it to be
-      // different based on the players attack
-      // PlaySound(punch_sound);
-      player_action = HURT;
-      enemy_hit_applied = true;
-      player_damage_start_time = GetTime();
+
+    // if True attack if false debuff
+    const bool attack_or_debuff = rand() % 2 == 0;
+    if (attack_or_debuff) {
       int damage = (rand() % 5) + 4;
       if (damage >= player.health_points) {
         player.health_points = 0;
       } else {
         player.health_points -= damage;
       }
+      break;
+    }
 
-      if (rand() % 2 % 2 == 0) {
-        const int board_pos = rand() % 16;
-        // (THINKING) maybe this should be a property on the player?
-        for (int i = 0; i < BOARD_COUNT; i++) {
-          letter_bag.tiles[board[board_pos]].poisoned = true;
-        }
-      }
+    if (!enemy_hit_applied && enemy.abilities & POISONS) {
+      uint8_t tile_position = rand() % 16;
+      letter_bag.tiles[board[tile_position]].poisoned = true;
+      enemy_hit_applied = true;
+    }
+
+    if (enemy.abilities & LOCK_TILE) {
     }
 
     if (frame >= frames) {
@@ -486,6 +496,34 @@ void update_draw(void) {
       phase = TURN_TRANSITION_TO_PLAYER;
       turn_transition_start_time = GetTime();
     }
+
+    // const int frames = 9;
+    // float fps = 10.0f;
+    // float elapsed = GetTime() - enemy_attack_start_time;
+    // int frame = (int)(elapsed * fps);
+    // if (!enemy_hit_applied && frame == 6) {
+    //   player_action = HURT;
+    //   enemy_hit_applied = true;
+    //   player_damage_start_time = GetTime();
+    //   int damage = (rand() % 5) + 4;
+    //   if (damage >= player.health_points) {
+    //     player.health_points = 0;
+    //   } else {
+    //     player.health_points -= damage;
+    //   }
+    //
+    //   if (rand() % 2 % 2 == 0) {
+    //     const int board_pos = rand() % 16;
+    //     // (THINKING) maybe this should be a property on the player?
+    //     letter_bag.tiles[board[board_pos]].poisoned = true;
+    //   }
+    // }
+    //
+    // if (frame >= frames) {
+    //   enemy_action = IDLE;
+    //   phase = TURN_TRANSITION_TO_PLAYER;
+    //   turn_transition_start_time = GetTime();
+    // }
   } break;
   case IDLE: {
   } break;
@@ -789,11 +827,11 @@ int main(int argc, char *argv[]) {
   }
 
   enemies[0] = enemy;
+  enemy.abilities = POISONS;
   enemies[1] = (Entity){
-      .health_points = 30,
-      .max_health_points = 30,
-  };
-  enemies[2] = (Entity){.health_points = 60, .max_health_points = 60};
+      .health_points = 30, .max_health_points = 30, .abilities = POISONS};
+  enemies[2] = (Entity){
+      .health_points = 60, .max_health_points = 60, .abilities = LOCK_TILE};
 #ifdef PLATFORM_WEB
   emscripten_set_main_loop(update_draw, 0, 1);
 #else
