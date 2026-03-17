@@ -21,6 +21,7 @@
 #define TILE_SIZE 32
 // #define TILE_NONE 0xFF // Sentinel Value
 #define MAX_CHAR_SELECTION 10
+#define MAX_ENCOUNTER_ENEMIES 3
 
 #define TURN_TRANSITION_DURATION 1.0f
 #define FLAG(N) (1u << N)
@@ -40,8 +41,8 @@ typedef struct {
 
 typedef enum { IDLE, ATTACK, HURT, DEATH } EntityState;
 enum MonsterAbilityFlags {
-  POISONS = FLAG(1),
-  SELF_DESTRUCT = FLAG(2), // Explodes instead of attacking
+  POISONS = FLAG(0),
+  SELF_DESTRUCT = FLAG(1), // Explodes and dies instead of attacking
   LOCK_TILE = FLAG(2),     // Locks player tile
 };
 // typedef enum { PLAYER, MUSHROOM, LOCK_AND_KEY, TILE } EntityType;
@@ -63,6 +64,10 @@ typedef struct {
   bool poisoned;
   Animation animation;
   Color tint;
+
+  // How long has the entity been in this state
+  float state_time;
+  bool action_applied;
 } Entity;
 
 typedef struct {
@@ -79,6 +84,11 @@ typedef enum {
   ENEMY_TURN,
   ENEMY_END_STEP,
 } Phase;
+
+typedef struct {
+  uint8_t enemy_count;
+  Entity enemies[MAX_ENCOUNTER_ENEMIES];
+} Encounter;
 
 //----------------------------------------------------------------------------------
 // State
@@ -121,39 +131,36 @@ Sound backspace_sound;
 
 Music upbeat_music;
 
-EntityState enemy_action = IDLE;
-EntityState player_action = IDLE;
-
+float turn_transition_time = 0.0f;
 Phase phase = TURN_TRANSITION_TO_PLAYER;
 
 int player_pending_damage = 0;
-float player_attack_start_time = 0.0f;
-float player_damage_start_time = -1.0f;
-float player_death_start_time = -1.0f;
-bool player_hit_applied = false;
-
-float enemy_attack_start_time = 0.0f;
-float enemy_damage_start_time = 0.0f;
-float enemy_death_start_time = 0.0f;
-bool enemy_hit_applied = false;
-
-float turn_transition_start_time = 1.0f;
-Entity player = {.health_points = 60, .max_health_points = 60, .tint = WHITE};
-Entity enemy = {.health_points = 12, .max_health_points = 12};
-int current_enemy = 0;
-
-Entity enemies[30] = {0};
+Entity player = {.state = IDLE,
+                 .action_applied = false,
+                 .health_points = 60,
+                 .max_health_points = 60,
+                 .tint = WHITE};
 
 int current_encounter = 0;
-int encounter_length[] = {1, 1, 2};
-Entity encounter_table[] = {
-    // 1st encounter
-    {.health_points = 30, .max_health_points = 30, .abilities = POISONS},
-    // 2nd encounter
-    {.health_points = 60, .max_health_points = 60, .abilities = LOCK_TILE},
-    // 3rd encounter
-    {.health_points = 30, .max_health_points = 30, .abilities = POISONS},
-    {.health_points = 60, .max_health_points = 60, .abilities = LOCK_TILE}};
+Encounter encounter_table[] = {
+    {1, {{.health_points = 12, .max_health_points = 12, .abilities = POISONS}}},
+    {1,
+     {{.health_points = 24,
+       .max_health_points = 24,
+       .abilities = LOCK_TILE,
+       .tint = YELLOW}}},
+    {2,
+     {
+         {.health_points = 60,
+          .max_health_points = 60,
+          .abilities = LOCK_TILE,
+          .tint = YELLOW},
+         {.health_points = 60,
+          .max_health_points = 60,
+          .abilities = LOCK_TILE,
+          .tint = GREEN},
+     }},
+};
 
 // UI
 const uint8_t padding = 3;
@@ -172,6 +179,17 @@ float submit_button_radius = 20;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
+
+void entity_set_state(Entity *entity, EntityState state) {
+  if (entity->state == state) {
+    return;
+  }
+
+  entity->state = state;
+  entity->state_time = 0.0f;
+  entity->action_applied = false;
+}
+
 bool binary_search_word(char **words, const char *target, int count) {
   int high = count - 1;
   int low = 0;
@@ -302,6 +320,10 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   DrawTexture(letter_tex, (int)x, (int)y, tint);
 }
 
+int entity_current_frame(Entity *e) {
+  return (int)(e->state_time * e->animation.fps);
+}
+
 void draw_animation(Animation anim, float t, Rectangle dest, Color tint) {
   int frame = (int)(t * anim.fps);
 
@@ -357,27 +379,25 @@ void update_draw(void) {
   SetMusicVolume(upbeat_music, 0.05f);
   SetSoundVolume(punch_sound, 0.1f);
 
-  player.tint = WHITE;
+  float dt = GetFrameTime();
+  player.state_time += dt;
 
-  if (enemy.health_points == 0 && enemy_action != DEATH) {
-    enemy_action = DEATH;
-    enemy_death_start_time = GetTime();
+  Encounter *encounter2 = &encounter_table[current_encounter];
+  for (int i = 0; i < encounter2->enemy_count; i++) {
+    encounter2->enemies[i].state_time += dt;
   }
 
-  // if (player.health_points == 0 && player_action != DEATH) {
-  //   player_action = DEATH;
-  //   player_death_start_time = GetTime();
-  // }
+  if (phase == TURN_TRANSITION_TO_PLAYER || phase == TURN_TRANSITION_TO_ENEMY) {
+    turn_transition_time += dt;
+  }
 
+  Entity *enemy = &encounter_table[current_encounter].enemies[0];
   switch (phase) {
   case TURN_TRANSITION_TO_ENEMY:
   case TURN_TRANSITION_TO_PLAYER: {
-    if (turn_transition_start_time > 0) {
-      double elapsed = GetTime() - turn_transition_start_time;
-      if (elapsed >= TURN_TRANSITION_DURATION) {
-        phase = phase == TURN_TRANSITION_TO_PLAYER ? PLAYER_TURN : ENEMY_TURN;
-        turn_transition_start_time = 0.0f;
-      }
+    if (turn_transition_time >= TURN_TRANSITION_DURATION) {
+      phase = phase == TURN_TRANSITION_TO_PLAYER ? PLAYER_TURN : ENEMY_TURN;
+      turn_transition_time = 0.0f;
     }
   } break;
   case PLAYER_TURN: {
@@ -385,164 +405,143 @@ void update_draw(void) {
   } break;
   case PLAYER_END_STEP: {
     // apply poison damage
-    uint8_t poison_count = 0;
-    for (int i = 0; i < BOARD_COUNT; i++) {
-      if (letter_bag.tiles[board[i]].poisoned) {
-        poison_count++;
-      }
-    }
-
-    if (poison_count == 0) {
-      phase = TURN_TRANSITION_TO_ENEMY;
-      break;
-    }
-
-    player_action = HURT;
-    player_damage_start_time = GetTime();
-    // (TODO) tint not working
-    player.tint = GREEN;
-    player.health_points -= poison_count * 2;
+    // uint8_t poison_count = 0;
+    // for (int i = 0; i < BOARD_COUNT; i++) {
+    //   if (letter_bag.tiles[board[i]].poisoned) {
+    //     poison_count++;
+    //   }
+    // }
+    //
+    // if (poison_count == 0) {
+    //   phase = TURN_TRANSITION_TO_ENEMY;
+    //   break;
+    // }
+    //
+    // player_action = HURT;
+    // player_damage_start_time = GetTime();
+    // // (TODO) tint not working
+    // player.tint = GREEN;
+    // player.health_points -= poison_count * 2;
     phase = TURN_TRANSITION_TO_ENEMY;
+    turn_transition_time = 0.0f;
   } break;
   case ENEMY_TURN: {
-    if (enemy_action != ATTACK) {
-      enemy_action = ATTACK;
-      enemy_attack_start_time = GetTime();
-      enemy_hit_applied = false;
+    if (enemy->state != ATTACK) {
+      entity_set_state(enemy, ATTACK);
     }
   } break;
   case ENEMY_END_STEP: {
   } break;
   }
 
-  switch (player_action) {
+  switch (player.state) {
   case IDLE: {
+    player.animation = knight_idle;
   } break;
   case DEATH: {
+    player.animation = knight_death;
     // (TODO) GAME OVER
   } break;
   case ATTACK: {
-    double elapsed = GetTime() - player_attack_start_time;
-    int frame = (int)(elapsed * 15);
-    if (!player_hit_applied && frame == 3) {
-      enemy_damage_start_time = GetTime();
-      enemy_action = HURT;
-      PlaySound(punch_sound);
-      player_hit_applied = true;
+    player.animation = knight_attack;
+    int frame = entity_current_frame(&player);
 
-      if (player_pending_damage >= enemy.health_points) {
-        enemy.health_points = 0;
+    if (!player.action_applied && frame == 3) {
+      entity_set_state(enemy, HURT);
+      PlaySound(punch_sound);
+      player.action_applied = true;
+
+      // TODO move to a function probably
+      if (player_pending_damage >= enemy->health_points) {
+        enemy->health_points = 0;
       } else {
-        enemy.health_points -= player_pending_damage;
+        enemy->health_points -= player_pending_damage;
       }
       player_pending_damage = 0;
+
+      if (enemy->health_points <= 0) {
+        enemy->health_points = 0;
+        entity_set_state(enemy, DEATH);
+      }
     }
 
     if (frame >= 6) {
       if (phase == PLAYER_END_STEP) {
         phase = TURN_TRANSITION_TO_ENEMY;
+        turn_transition_time = 0.0f;
       }
-      player_action = IDLE;
+      entity_set_state(&player, IDLE);
       // (TODO) Should maybe be player turn end
       // phase = TURN_TRANSITION_TO_ENEMY;
     }
   } break;
   case HURT: {
+    player.animation = knight_hurt;
+
     PlaySound(punch_sound);
-    double elapsed = GetTime() - player_damage_start_time;
-    int frame = (int)(elapsed * 15);
-    if (frame >= 4) {
-      player_action = IDLE;
-      player_damage_start_time = -1.0f;
+    if (entity_current_frame(&player) >= 4) {
+      entity_set_state(&player, IDLE);
     }
     // todo rpobably a better way to do this
-    if (player.health_points == 0 && player_action != DEATH) {
-      player_action = DEATH;
-      player_death_start_time = GetTime();
-    }
+    // if (player.health_points == 0 && player.state != DEATH) {
+    //   entity_set_state(&player, DEATH);
+    // }
   } break;
   }
 
-  switch (enemy_action) {
-  case ATTACK: {
-    const int frames = 9;
-    float fps = 10.0f;
-    float elapsed = GetTime() - enemy_attack_start_time;
-    int frame = (int)(elapsed * fps);
+  Encounter *encounter = &encounter_table[current_encounter];
+  for (int i = 0; i < encounter->enemy_count; i++) {
+    Entity *enemy = &encounter->enemies[i];
 
-    // if True attack if false debuff
-    const bool attack_or_debuff = rand() % 2 == 0;
-    if (attack_or_debuff) {
-      int damage = (rand() % 5) + 4;
-      if (damage >= player.health_points) {
-        player.health_points = 0;
-      } else {
-        player.health_points -= damage;
+    switch (enemy->state) {
+    case ATTACK: {
+      enemy->animation = mushroom_attack;
+
+      // if True attack if false debuff
+      // const bool attack_or_debuff = rand() % 2 == 0;
+      // if (attack_or_debuff) {
+      //   int damage = (rand() % 5) + 4;
+      //   if (damage >= player.health_points) {
+      //     player.health_points = 0;
+      //   } else {
+      //     player.health_points -= damage;
+      //   }
+      //   break;
+      // }
+      // if (!enemy->action_applied && enemy->abilities & POISONS) {
+      //   uint8_t tile_position = rand() % 16;
+      //   letter_bag.tiles[board[tile_position]].poisoned = true;
+      //   enemy->action_applied = true;
+      // }
+      //
+      // if (enemy->abilities & LOCK_TILE) {
+      // }
+
+      if (entity_current_frame(enemy) >= enemy->animation.frame_count) {
+        entity_set_state(enemy, IDLE);
+        phase = TURN_TRANSITION_TO_PLAYER;
+        turn_transition_time = 0.0f;
       }
-      break;
-    }
+    } break;
+    case IDLE: {
+      enemy->animation = mushroom_idle;
+    } break;
+    case HURT: {
+      enemy->animation = mushroom_hurt;
 
-    if (!enemy_hit_applied && enemy.abilities & POISONS) {
-      uint8_t tile_position = rand() % 16;
-      letter_bag.tiles[board[tile_position]].poisoned = true;
-      enemy_hit_applied = true;
+      if (entity_current_frame(enemy) >= enemy->animation.frame_count) {
+        entity_set_state(enemy, IDLE);
+        phase = PLAYER_END_STEP;
+        turn_transition_time = 0.0f;
+      }
+    } break;
+    case DEATH: {
+      enemy->animation = mushroom_death;
+      if (entity_current_frame(enemy) >= 15) {
+        current_encounter++;
+      }
+    } break;
     }
-
-    if (enemy.abilities & LOCK_TILE) {
-    }
-
-    if (frame >= frames) {
-      enemy_action = IDLE;
-      phase = TURN_TRANSITION_TO_PLAYER;
-      turn_transition_start_time = GetTime();
-    }
-
-    // const int frames = 9;
-    // float fps = 10.0f;
-    // float elapsed = GetTime() - enemy_attack_start_time;
-    // int frame = (int)(elapsed * fps);
-    // if (!enemy_hit_applied && frame == 6) {
-    //   player_action = HURT;
-    //   enemy_hit_applied = true;
-    //   player_damage_start_time = GetTime();
-    //   int damage = (rand() % 5) + 4;
-    //   if (damage >= player.health_points) {
-    //     player.health_points = 0;
-    //   } else {
-    //     player.health_points -= damage;
-    //   }
-    //
-    //   if (rand() % 2 % 2 == 0) {
-    //     const int board_pos = rand() % 16;
-    //     // (THINKING) maybe this should be a property on the player?
-    //     letter_bag.tiles[board[board_pos]].poisoned = true;
-    //   }
-    // }
-    //
-    // if (frame >= frames) {
-    //   enemy_action = IDLE;
-    //   phase = TURN_TRANSITION_TO_PLAYER;
-    //   turn_transition_start_time = GetTime();
-    // }
-  } break;
-  case IDLE: {
-  } break;
-  case HURT: {
-    const int frames = 5;
-    const float fps = 15.0f;
-    float elapsed = GetTime() - enemy_damage_start_time;
-    int frame = (int)(elapsed * fps);
-    if (frame >= frames) {
-      enemy_action = IDLE;
-      phase = PLAYER_END_STEP;
-      turn_transition_start_time = GetTime();
-    }
-  } break;
-  case DEATH: {
-    current_enemy++;
-    enemy = enemies[current_enemy];
-
-  } break;
   }
 
   if (phase != PLAYER_TURN && phase != TURN_TRANSITION_TO_PLAYER) {
@@ -629,9 +628,7 @@ void update_draw(void) {
     selected_word[0] = '\0';
     valid_word = false;
 
-    player_action = ATTACK;
-    player_attack_start_time = GetTime();
-    player_hit_applied = false;
+    entity_set_state(&player, ATTACK);
   }
 
   // (TODO) Right click should clear selection
@@ -670,73 +667,37 @@ draw:
   DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
 
   // (TODO) draw shadows under sprites
-  Animation player_anim = {0};
-  float player_time = 0;
-  switch (player_action) {
-  case ATTACK: {
-    player_anim = knight_attack;
-    player_time = GetTime() - player_attack_start_time;
-  } break;
-  case IDLE: {
-    player_anim = knight_idle;
-    player_time = GetTime();
-  } break;
-  case HURT: {
-    player_anim = knight_hurt;
-    player_time = GetTime() - player_damage_start_time;
-  } break;
-  case DEATH: {
-    player_anim = knight_death;
-    player_time = GetTime() - player_death_start_time;
-  } break;
-  }
 
   const float scale = 2.5f;
   float ground_y = board_origin_y - 10;
-  float dest_w = player_anim.frame_width * scale;
-  float dest_h = player_anim.frame_height * scale;
+  float dest_w = player.animation.frame_width * scale;
+  float dest_h = player.animation.frame_height * scale;
   Rectangle dest = {100 - (dest_w / 2.0f), ground_y - dest_h, dest_w, dest_h};
-  draw_animation(player_anim, player_time, dest, player.tint);
+  draw_animation(player.animation, player.state_time, dest, player.tint);
 
   Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
                              dest.y + dest.height + 6, 80, 6};
   draw_health_bar(player_health, player.health_points,
                   player.max_health_points);
 
-  Animation enemy_anim = {0};
-  float enemy_time = 0;
-  switch (enemy_action) {
-  case ATTACK: {
-    enemy_anim = mushroom_attack;
-    enemy_time = GetTime() - enemy_attack_start_time;
-  } break;
-  case IDLE: {
-    enemy_anim = mushroom_idle;
-    enemy_time = GetTime();
-  } break;
-  case HURT: {
-    enemy_anim = mushroom_hurt;
-    enemy_time = GetTime() - enemy_damage_start_time;
-  } break;
-  case DEATH: {
-    enemy_anim = mushroom_death;
-    enemy_time = GetTime() - enemy_death_start_time;
-  } break;
+  for (int i = 0; i < encounter->enemy_count; i++) {
+    Entity *enemy = &encounter->enemies[i];
+
+    float enemy_anchor_x = GetScreenWidth() - 100;
+    float enemy_dest_w = enemy->animation.frame_width * scale;
+    float enemy_dest_h = enemy->animation.frame_height * scale;
+
+    Rectangle enemy_dest = {enemy_anchor_x - enemy_dest_w / 2.0f,
+                            ground_y - enemy_dest_h, enemy_dest_w,
+                            enemy_dest_h};
+
+    draw_animation(enemy->animation, enemy->state_time, enemy_dest, WHITE);
+
+    Rectangle enemy_health = {enemy_anchor_x - 40.0f,
+                              enemy_dest.y + enemy_dest.height + 8, 80, 6};
+    draw_health_bar(enemy_health, enemy->health_points,
+                    enemy->max_health_points);
   }
-
-  float enemy_anchor_x = GetScreenWidth() - 100;
-  float enemy_dest_w = enemy_anim.frame_width * scale;
-  float enemy_dest_h = enemy_anim.frame_height * scale;
-
-  Rectangle enemy_dest = {enemy_anchor_x - enemy_dest_w / 2.0f,
-                          ground_y - enemy_dest_h, enemy_dest_w, enemy_dest_h};
-
-  draw_animation(enemy_anim, enemy_time, enemy_dest, WHITE);
-
-  Rectangle enemy_health = {enemy_anchor_x - 40.0f,
-                            enemy_dest.y + enemy_dest.height + 8, 80, 6};
-
-  draw_health_bar(enemy_health, enemy.health_points, enemy.max_health_points);
 
   // (MAYBE) player text should appear at max text size with low opacity and
   // become more opaque as time goes on
@@ -744,8 +705,7 @@ draw:
   if (phase == TURN_TRANSITION_TO_ENEMY || phase == TURN_TRANSITION_TO_PLAYER) {
     const char *text =
         (phase == TURN_TRANSITION_TO_PLAYER) ? "Player Turn" : "Enemy Turn";
-    double elapsed = GetTime() - turn_transition_start_time;
-    float t = elapsed / TURN_TRANSITION_DURATION;
+    float t = turn_transition_time / TURN_TRANSITION_DURATION;
     if (t >= 1.0f) {
       t = 1.0f;
     }
@@ -826,12 +786,6 @@ int main(int argc, char *argv[]) {
     letter_bag.remaining--;
   }
 
-  enemies[0] = enemy;
-  enemy.abilities = POISONS;
-  enemies[1] = (Entity){
-      .health_points = 30, .max_health_points = 30, .abilities = POISONS};
-  enemies[2] = (Entity){
-      .health_points = 60, .max_health_points = 60, .abilities = LOCK_TILE};
 #ifdef PLATFORM_WEB
   emscripten_set_main_loop(update_draw, 0, 1);
 #else
