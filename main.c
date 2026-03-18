@@ -131,7 +131,7 @@ Sound backspace_sound;
 
 Music upbeat_music;
 
-float turn_transition_time = 0.0f;
+float phase_time = 0.0f;
 Phase phase = TURN_TRANSITION_TO_PLAYER;
 
 int player_pending_damage = 0;
@@ -381,27 +381,31 @@ void update_draw(void) {
 
   float dt = GetFrameTime();
   player.state_time += dt;
+  phase_time += dt;
 
   Encounter *encounter2 = &encounter_table[current_encounter];
   for (int i = 0; i < encounter2->enemy_count; i++) {
     encounter2->enemies[i].state_time += dt;
   }
 
-  if (phase == TURN_TRANSITION_TO_PLAYER || phase == TURN_TRANSITION_TO_ENEMY) {
-    turn_transition_time += dt;
-  }
-
+  bool enemy_attacks_finished = true;
   Entity *enemy = &encounter_table[current_encounter].enemies[0];
   switch (phase) {
   case TURN_TRANSITION_TO_ENEMY:
   case TURN_TRANSITION_TO_PLAYER: {
-    if (turn_transition_time >= TURN_TRANSITION_DURATION) {
+    if (phase_time >= TURN_TRANSITION_DURATION) {
       phase = phase == TURN_TRANSITION_TO_PLAYER ? PLAYER_TURN : ENEMY_TURN;
-      turn_transition_time = 0.0f;
+      phase_time = 0.0f;
     }
   } break;
   case PLAYER_TURN: {
     // submit words
+    // (TODO) I'll probably have to change it when action_applied encompassses
+    // more than teh player attacking
+    if (player.action_applied) {
+      phase = PLAYER_END_STEP;
+      phase_time = 0.0f;
+    }
   } break;
   case PLAYER_END_STEP: {
     // apply poison damage
@@ -423,14 +427,30 @@ void update_draw(void) {
     // player.tint = GREEN;
     // player.health_points -= poison_count * 2;
     phase = TURN_TRANSITION_TO_ENEMY;
-    turn_transition_time = 0.0f;
+    phase_time = 0.0f;
   } break;
   case ENEMY_TURN: {
     if (enemy->state != ATTACK) {
       entity_set_state(enemy, ATTACK);
     }
+
+    // check if all enemies have attacked
+    // if an enemy is alive
+    // check if its attacked
+    if (enemy->health_points > 0 && !enemy->action_applied) {
+      enemy_attacks_finished = false;
+    }
+
+    if (enemy_attacks_finished) {
+      phase = ENEMY_END_STEP;
+      phase_time = 0.0f;
+    }
   } break;
   case ENEMY_END_STEP: {
+    if (phase_time >= TURN_TRANSITION_DURATION) {
+      phase = TURN_TRANSITION_TO_PLAYER;
+      phase_time = 0.0f;
+    }
   } break;
   }
 
@@ -468,7 +488,7 @@ void update_draw(void) {
     if (frame >= 6) {
       if (phase == PLAYER_END_STEP) {
         phase = TURN_TRANSITION_TO_ENEMY;
-        turn_transition_time = 0.0f;
+        phase_time = 0.0f;
       }
       entity_set_state(&player, IDLE);
       // (TODO) Should maybe be player turn end
@@ -517,10 +537,11 @@ void update_draw(void) {
       // if (enemy->abilities & LOCK_TILE) {
       // }
 
+      if (entity_current_frame(enemy) >= 3) {
+        enemy->action_applied = true;
+      }
       if (entity_current_frame(enemy) >= enemy->animation.frame_count) {
         entity_set_state(enemy, IDLE);
-        phase = TURN_TRANSITION_TO_PLAYER;
-        turn_transition_time = 0.0f;
       }
     } break;
     case IDLE: {
@@ -531,8 +552,6 @@ void update_draw(void) {
 
       if (entity_current_frame(enemy) >= enemy->animation.frame_count) {
         entity_set_state(enemy, IDLE);
-        phase = PLAYER_END_STEP;
-        turn_transition_time = 0.0f;
       }
     } break;
     case DEATH: {
@@ -705,7 +724,7 @@ draw:
   if (phase == TURN_TRANSITION_TO_ENEMY || phase == TURN_TRANSITION_TO_PLAYER) {
     const char *text =
         (phase == TURN_TRANSITION_TO_PLAYER) ? "Player Turn" : "Enemy Turn";
-    float t = turn_transition_time / TURN_TRANSITION_DURATION;
+    float t = phase_time / TURN_TRANSITION_DURATION;
     if (t >= 1.0f) {
       t = 1.0f;
     }
