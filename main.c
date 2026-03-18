@@ -53,8 +53,11 @@ typedef struct {
   int height;
   char tile_value;
 
-  uint8_t max_health_points;
-  uint8_t health_points;
+  int max_health_points;
+  int health_points;
+
+  uint8_t min_damage;
+  uint8_t max_damage;
 
   EntityState state;
   uint8_t abilities;
@@ -141,24 +144,45 @@ Entity player = {.state = IDLE,
                  .max_health_points = 60,
                  .tint = WHITE};
 
-int current_encounter = 0;
+// (TODO) Clearer name for this?
+int encounter_index = 0;
 Encounter encounter_table[] = {
-    {1, {{.health_points = 12, .max_health_points = 12, .abilities = POISONS}}},
     {1,
-     {{.health_points = 24,
-       .max_health_points = 24,
-       .abilities = LOCK_TILE,
-       .tint = YELLOW}}},
+     {{
+         .health_points = 12,
+         .max_health_points = 12,
+         .abilities = POISONS,
+         .max_damage = 10,
+         .min_damage = 7,
+         .tint = WHITE,
+     }}},
+    {1,
+     {{
+         .health_points = 24,
+         .max_health_points = 24,
+         .abilities = LOCK_TILE,
+         .max_damage = 10,
+         .min_damage = 7,
+         .tint = YELLOW,
+     }}},
     {2,
      {
-         {.health_points = 60,
-          .max_health_points = 60,
-          .abilities = LOCK_TILE,
-          .tint = YELLOW},
-         {.health_points = 60,
-          .max_health_points = 60,
-          .abilities = LOCK_TILE,
-          .tint = GREEN},
+         {
+             .health_points = 60,
+             .max_health_points = 60,
+             .abilities = LOCK_TILE,
+             .max_damage = 10,
+             .min_damage = 7,
+             .tint = YELLOW,
+         },
+         {
+             .health_points = 60,
+             .max_health_points = 60,
+             .abilities = LOCK_TILE,
+             .max_damage = 10,
+             .min_damage = 7,
+             .tint = GREEN,
+         },
      }},
 };
 
@@ -188,6 +212,20 @@ void entity_set_state(Entity *entity, EntityState state) {
   entity->state = state;
   entity->state_time = 0.0f;
   entity->action_applied = false;
+}
+
+void entity_take_damage(Entity *entity, int damage) {
+  if (entity->health_points <= 0) {
+    return;
+  }
+
+  entity->health_points -= damage;
+  if (entity->health_points <= 0) {
+    entity->health_points = 0;
+    entity_set_state(entity, DEATH);
+  } else {
+    entity_set_state(entity, HURT);
+  }
 }
 
 bool binary_search_word(char **words, const char *target, int count) {
@@ -383,13 +421,12 @@ void update_draw(void) {
   player.state_time += dt;
   phase_time += dt;
 
-  Encounter *encounter2 = &encounter_table[current_encounter];
-  for (int i = 0; i < encounter2->enemy_count; i++) {
-    encounter2->enemies[i].state_time += dt;
+  Encounter *current_encounter = &encounter_table[encounter_index];
+
+  for (int i = 0; i < current_encounter->enemy_count; i++) {
+    current_encounter->enemies[i].state_time += dt;
   }
 
-  bool enemy_attacks_finished = true;
-  Entity *enemy = &encounter_table[current_encounter].enemies[0];
   switch (phase) {
   case TURN_TRANSITION_TO_ENEMY:
   case TURN_TRANSITION_TO_PLAYER: {
@@ -408,37 +445,21 @@ void update_draw(void) {
     }
   } break;
   case PLAYER_END_STEP: {
-    // apply poison damage
-    // uint8_t poison_count = 0;
-    // for (int i = 0; i < BOARD_COUNT; i++) {
-    //   if (letter_bag.tiles[board[i]].poisoned) {
-    //     poison_count++;
-    //   }
-    // }
-    //
-    // if (poison_count == 0) {
-    //   phase = TURN_TRANSITION_TO_ENEMY;
-    //   break;
-    // }
-    //
-    // player_action = HURT;
-    // player_damage_start_time = GetTime();
-    // // (TODO) tint not working
-    // player.tint = GREEN;
-    // player.health_points -= poison_count * 2;
     phase = TURN_TRANSITION_TO_ENEMY;
     phase_time = 0.0f;
   } break;
   case ENEMY_TURN: {
-    if (enemy->state != ATTACK) {
-      entity_set_state(enemy, ATTACK);
-    }
+    bool enemy_attacks_finished = true;
+    // TODO enemies should attack from left to right one after another
+    for (int i = 0; i < current_encounter->enemy_count; i++) {
+      Entity *enemy = &current_encounter->enemies[i];
+      if (enemy->state != ATTACK) {
+        entity_set_state(enemy, ATTACK);
+      }
 
-    // check if all enemies have attacked
-    // if an enemy is alive
-    // check if its attacked
-    if (enemy->health_points > 0 && !enemy->action_applied) {
-      enemy_attacks_finished = false;
+      if (enemy->health_points > 0 && !enemy->action_applied) {
+        enemy_attacks_finished = false;
+      }
     }
 
     if (enemy_attacks_finished) {
@@ -454,6 +475,7 @@ void update_draw(void) {
   } break;
   }
 
+  uint8_t targeted_enemy = 0;
   switch (player.state) {
   case IDLE: {
     player.animation = knight_idle;
@@ -466,33 +488,15 @@ void update_draw(void) {
     player.animation = knight_attack;
     int frame = entity_current_frame(&player);
 
+    Entity *enemy = &current_encounter->enemies[targeted_enemy];
     if (!player.action_applied && frame == 3) {
-      entity_set_state(enemy, HURT);
       PlaySound(punch_sound);
+      entity_take_damage(enemy, player_pending_damage);
       player.action_applied = true;
-
-      // TODO move to a function probably
-      if (player_pending_damage >= enemy->health_points) {
-        enemy->health_points = 0;
-      } else {
-        enemy->health_points -= player_pending_damage;
-      }
-      player_pending_damage = 0;
-
-      if (enemy->health_points <= 0) {
-        enemy->health_points = 0;
-        entity_set_state(enemy, DEATH);
-      }
     }
 
     if (frame >= 6) {
-      if (phase == PLAYER_END_STEP) {
-        phase = TURN_TRANSITION_TO_ENEMY;
-        phase_time = 0.0f;
-      }
       entity_set_state(&player, IDLE);
-      // (TODO) Should maybe be player turn end
-      // phase = TURN_TRANSITION_TO_ENEMY;
     }
   } break;
   case HURT: {
@@ -502,42 +506,19 @@ void update_draw(void) {
     if (entity_current_frame(&player) >= 4) {
       entity_set_state(&player, IDLE);
     }
-    // todo rpobably a better way to do this
-    // if (player.health_points == 0 && player.state != DEATH) {
-    //   entity_set_state(&player, DEATH);
-    // }
   } break;
   }
 
-  Encounter *encounter = &encounter_table[current_encounter];
-  for (int i = 0; i < encounter->enemy_count; i++) {
-    Entity *enemy = &encounter->enemies[i];
-
+  for (int i = 0; i < current_encounter->enemy_count; i++) {
+    Entity *enemy = &current_encounter->enemies[i];
     switch (enemy->state) {
     case ATTACK: {
       enemy->animation = mushroom_attack;
+      uint8_t damage = enemy->min_damage +
+                       (rand() % (enemy->max_damage - enemy->min_damage));
 
-      // if True attack if false debuff
-      // const bool attack_or_debuff = rand() % 2 == 0;
-      // if (attack_or_debuff) {
-      //   int damage = (rand() % 5) + 4;
-      //   if (damage >= player.health_points) {
-      //     player.health_points = 0;
-      //   } else {
-      //     player.health_points -= damage;
-      //   }
-      //   break;
-      // }
-      // if (!enemy->action_applied && enemy->abilities & POISONS) {
-      //   uint8_t tile_position = rand() % 16;
-      //   letter_bag.tiles[board[tile_position]].poisoned = true;
-      //   enemy->action_applied = true;
-      // }
-      //
-      // if (enemy->abilities & LOCK_TILE) {
-      // }
-
-      if (entity_current_frame(enemy) >= 3) {
+      if (!enemy->action_applied && entity_current_frame(enemy) == 6) {
+        entity_take_damage(&player, damage);
         enemy->action_applied = true;
       }
       if (entity_current_frame(enemy) >= enemy->animation.frame_count) {
@@ -556,8 +537,9 @@ void update_draw(void) {
     } break;
     case DEATH: {
       enemy->animation = mushroom_death;
+
       if (entity_current_frame(enemy) >= 15) {
-        current_encounter++;
+        encounter_index++;
       }
     } break;
     }
@@ -687,33 +669,51 @@ draw:
 
   // (TODO) draw shadows under sprites
 
+  // Draw Player
   const float scale = 2.5f;
   float ground_y = board_origin_y - 10;
   float dest_w = player.animation.frame_width * scale;
   float dest_h = player.animation.frame_height * scale;
-  Rectangle dest = {100 - (dest_w / 2.0f), ground_y - dest_h, dest_w, dest_h};
+  Rectangle dest = {
+      100 - (dest_w / 2.0f),
+      ground_y - dest_h,
+      dest_w,
+      dest_h,
+  };
   draw_animation(player.animation, player.state_time, dest, player.tint);
 
-  Rectangle player_health = {dest.x + (dest.width - 80) / 2.0f,
-                             dest.y + dest.height + 6, 80, 6};
+  Rectangle player_health = {
+      dest.x + (dest.width - 80) / 2.0f,
+      dest.y + dest.height + 6,
+      80,
+      6,
+  };
   draw_health_bar(player_health, player.health_points,
                   player.max_health_points);
 
-  for (int i = 0; i < encounter->enemy_count; i++) {
-    Entity *enemy = &encounter->enemies[i];
+  // Draw Enemies
+  for (int i = 0; i < current_encounter->enemy_count; i++) {
+    Entity *enemy = &current_encounter->enemies[i];
 
-    float enemy_anchor_x = GetScreenWidth() - 100;
+    float enemy_anchor_x = VIRTUAL_WIDTH - 100;
     float enemy_dest_w = enemy->animation.frame_width * scale;
     float enemy_dest_h = enemy->animation.frame_height * scale;
 
-    Rectangle enemy_dest = {enemy_anchor_x - enemy_dest_w / 2.0f,
-                            ground_y - enemy_dest_h, enemy_dest_w,
-                            enemy_dest_h};
+    Rectangle enemy_dest = {
+        enemy_anchor_x - enemy_dest_w / 2.0f - i * 100,
+        ground_y - enemy_dest_h,
+        enemy_dest_w,
+        enemy_dest_h,
+    };
+    draw_animation(enemy->animation, enemy->state_time, enemy_dest,
+                   enemy->tint);
 
-    draw_animation(enemy->animation, enemy->state_time, enemy_dest, WHITE);
-
-    Rectangle enemy_health = {enemy_anchor_x - 40.0f,
-                              enemy_dest.y + enemy_dest.height + 8, 80, 6};
+    Rectangle enemy_health = {
+        enemy_dest.x,
+        enemy_dest.y + enemy_dest.height + 10,
+        80,
+        6,
+    };
     draw_health_bar(enemy_health, enemy->health_points,
                     enemy->max_health_points);
   }
@@ -734,8 +734,8 @@ draw:
     uint8_t end_size = 30;
     const int font_size = start_size + ((end_size - start_size) * ease_out);
     const int text_width = MeasureText(text, font_size);
-    const int x = (GetScreenWidth() / 2.0f) - (text_width / 2.0f);
-    const int y = (GetScreenHeight() / 3.0f);
+    const int x = (VIRTUAL_WIDTH / 2.0f) - (text_width / 2.0f);
+    const int y = (VIRTUAL_HEIGHT / 3.0f);
 
     DrawText(text, x, y, font_size, WHITE);
   }
@@ -754,7 +754,7 @@ int main(int argc, char *argv[]) {
   upbeat_music = LoadMusicStream("assets/upbeat_bg.wav");
 
   mushroom_idle = (Animation){
-      LoadTexture("assets/mushroom/Mushroom-Idle.png"), 80, 64, 7, 8.0f, true};
+      LoadTexture("assets/mushroom/mushroom-idle.png"), 30, 33, 7, 8.0f, true};
   mushroom_attack =
       (Animation){LoadTexture("assets/mushroom/mushroom-attack1.png"),
                   38,
