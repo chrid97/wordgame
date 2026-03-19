@@ -13,7 +13,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo -framework OpenGL \
     -o ./build/wordgame.exe
 else
-  gcc ./main.c \
+  gcc ./src/main.c \
     -I./lib/raylib/src/ \
     ./lib/raylib/src/libraylib.a \
     -lglfw -lGL -lopenal -lm -lpthread -ldl -lrt -lX11 \

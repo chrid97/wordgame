@@ -1,3 +1,4 @@
+#include "globals.h"
 #include "raylib.h"
 #include <assert.h>
 #include <stdbool.h>
@@ -265,39 +266,10 @@ void load_letter_textures(void) {
 }
 
 void init_letter_bag() {
-  uint8_t letter_occurrence[26] = {
-      8,  // a
-      2,  // b
-      4,  // c
-      4,  // d
-      11, // e
-      1,  // f
-      3,  // g
-      2,  // h
-      8,  // i
-      1,  // j
-      1,  // k
-      5,  // l
-      3,  // m
-      7,  // n
-      6,  // o
-      3,  // p
-      1,  // q
-      7,  // r
-      8,  // s
-      5,  // t
-      4,  // u
-      1,  // v
-      1,  // w
-      1,  // x
-      2,  // y
-      1   // z
-  };
   int i = 0;
   for (int letter = 0; letter < 26; letter++) {
     for (int j = 0; j < letter_occurrence[letter]; j++) {
       letter_bag.tiles[i++] = (Entity){
-          // .type = TILE,
           .position = {},
           .height = 50,
           .width = 50,
@@ -350,6 +322,7 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   if (letter_bag.tiles[tile_idx].poisoned) {
     tint = GREEN;
   }
+
   DrawTexture(tile_texture, rect.x, rect.y, tint);
 
   char tile_value = letter_bag.tiles[tile_idx].tile_value;
@@ -358,6 +331,25 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   float x = rect.x + (rect.width - letter_tex.width) / 2.0f;
   float y = rect.y + (rect.height - letter_tex.height) / 2.0f;
   DrawTexture(letter_tex, (int)x, (int)y, tint);
+
+  // --- Draw score in bottom-left ---
+  int score = letter_scores[tile_value - 'a'];
+
+  char score_text[4];
+  snprintf(score_text, sizeof(score_text), "%d", score);
+
+  int font_size = 10;
+
+  int text_x = rect.x + 3;
+  int text_y = rect.y + rect.height - font_size - 2;
+
+  // Optional outline for readability
+  DrawText(score_text, text_x - 1, text_y, font_size, BLACK);
+  DrawText(score_text, text_x + 1, text_y, font_size, BLACK);
+  DrawText(score_text, text_x, text_y - 1, font_size, BLACK);
+  DrawText(score_text, text_x, text_y + 1, font_size, BLACK);
+
+  DrawText(score_text, text_x, text_y, font_size, WHITE);
 }
 
 int entity_current_frame(Entity *e) {

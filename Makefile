@@ -8,7 +8,7 @@ run:
 
 web:
 	mkdir -p build
-	emcc ./main.c \
+	emcc ./src/main.c \
 	  -I./lib/raylib/src \
 	  ./lib/raylib/src/libraylib.web.a \
 	  -DPLATFORM_WEB \
