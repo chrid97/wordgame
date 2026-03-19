@@ -1,6 +1,7 @@
 #include "globals.h"
 #include "raylib.h"
 #include <assert.h>
+#include <stdalign.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -206,6 +207,17 @@ float submit_button_radius = 20;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
+
+int calculate_rack_damage(void) {
+  int damage = 0;
+
+  for (int i = 0; i < rack_length; i++) {
+    char tile_value = letter_bag.tiles[rack[i]].tile_value;
+    damage += letter_scores[tile_value - 'a'];
+  }
+
+  return damage;
+}
 
 void entity_set_state(Entity *entity, EntityState state) {
   if (entity->state == state) {
@@ -547,6 +559,7 @@ void update_draw(void) {
     goto draw;
   }
 
+  // Move tiles to rack
   Vector2 mouse_pos = GetMousePosition();
   if (rack_length < MAX_RACK_LENGTH &&
       CheckCollisionPointRec(mouse_pos, board_rect)) {
@@ -578,10 +591,12 @@ void update_draw(void) {
     } else {
       printf("Tile already selected\n");
     }
+    player_pending_damage = calculate_rack_damage();
 
     printf("Current word: %s\n", selected_word);
   }
 
+  // Deselect tiles
   if (CheckCollisionPointRec(mouse_pos,
                              (Rectangle){rack_origin_x, rack_origin_y,
                                          (TILE_SIZE + padding) * rack_length,
@@ -602,9 +617,11 @@ void update_draw(void) {
                  binary_search_word(word_pointers, selected_word, total_words);
     printf("Current word: %s\n", selected_word);
 
+    player_pending_damage = calculate_rack_damage();
     PlaySound(backspace_sound);
   }
 
+  // Submit word / Attack
   if (valid_word && CheckCollisionPointCircle(mouse_pos, submit_button_pos,
                                               submit_button_radius)) {
     printf("Submitted word %s!\n", selected_word);
@@ -616,8 +633,6 @@ void update_draw(void) {
       printf("Refilled bag with tile %c\n",
              letter_bag.tiles[letter_bag.remaining].tile_value);
     };
-
-    player_pending_damage = rack_length;
 
     rack_length = 0;
     selected_word[0] = '\0';
@@ -689,28 +704,6 @@ draw:
                     enemy->max_health_points);
   }
 
-  // (MAYBE) player text should appear at max text size with low opacity and
-  // become more opaque as time goes on
-  // (TODO) maybe start with the text transparent then make it more opaque
-  if (phase == TURN_TRANSITION_TO_ENEMY || phase == TURN_TRANSITION_TO_PLAYER) {
-    const char *text =
-        (phase == TURN_TRANSITION_TO_PLAYER) ? "Player Turn" : "Enemy Turn";
-    float t = phase_time / TURN_TRANSITION_DURATION;
-    if (t >= 1.0f) {
-      t = 1.0f;
-    }
-
-    float ease_out = 1.0f - (1.0f - t) * (1.0f - t);
-    uint8_t start_size = 50;
-    uint8_t end_size = 30;
-    const int font_size = start_size + ((end_size - start_size) * ease_out);
-    const int text_width = MeasureText(text, font_size);
-    const int x = (VIRTUAL_WIDTH / 2.0f) - (text_width / 2.0f);
-    const int y = (VIRTUAL_HEIGHT / 3.0f);
-
-    DrawText(text, x, y, font_size, WHITE);
-  }
-
   // draw board
   for (int i = 0; i < BOARD_COUNT; i++) {
     const uint8_t row = i / BOARD_ROW;
@@ -719,6 +712,24 @@ draw:
     const int y = board_origin_y + (row * (TILE_SIZE + padding));
     draw_tile(board[i], (Rectangle){x, y, TILE_SIZE, TILE_SIZE},
               is_selected[board[i]]);
+  }
+
+  // Draw pending damage
+  if (rack_length > 0) {
+    char damage_text[32];
+    snprintf(damage_text, sizeof(damage_text), "Damage: %d",
+             player_pending_damage);
+
+    int font_size = 20;
+    int text_x = rack_origin_x;
+    int text_y = rack_origin_y - 28;
+
+    DrawText(damage_text, text_x - 1, text_y, font_size, BLACK);
+    DrawText(damage_text, text_x + 1, text_y, font_size, BLACK);
+    DrawText(damage_text, text_x, text_y - 1, font_size, BLACK);
+    DrawText(damage_text, text_x, text_y + 1, font_size, BLACK);
+
+    DrawText(damage_text, text_x, text_y, font_size, valid_word ? RED : GRAY);
   }
 
   // Draw Rack
@@ -740,6 +751,29 @@ draw:
   DrawText("Submit", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
            BLACK);
   DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
+
+  // Draw turn transitions
+  // (MAYBE) player text should appear at max text size with low opacity and
+  // become more opaque as time goes on
+  // (TODO) maybe start with the text transparent then make it more opaque
+  if (phase == TURN_TRANSITION_TO_ENEMY || phase == TURN_TRANSITION_TO_PLAYER) {
+    const char *text =
+        (phase == TURN_TRANSITION_TO_PLAYER) ? "Player Turn" : "Enemy Turn";
+    float t = phase_time / TURN_TRANSITION_DURATION;
+    if (t >= 1.0f) {
+      t = 1.0f;
+    }
+
+    float ease_out = 1.0f - (1.0f - t) * (1.0f - t);
+    uint8_t start_size = 50;
+    uint8_t end_size = 30;
+    const int font_size = start_size + ((end_size - start_size) * ease_out);
+    const int text_width = MeasureText(text, font_size);
+    const int x = (VIRTUAL_WIDTH / 2.0f) - (text_width / 2.0f);
+    const int y = (VIRTUAL_HEIGHT / 3.0f);
+
+    DrawText(text, x, y, font_size, WHITE);
+  }
 
   EndDrawing();
 }
