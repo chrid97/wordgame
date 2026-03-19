@@ -446,8 +446,20 @@ void update_draw(void) {
     // (TODO) I'll probably have to change it when action_applied encompassses
     // more than teh player attacking
     if (player.action_applied) {
-      phase = PLAYER_END_STEP;
-      phase_time = 0.0f;
+      bool enemies_alive = true;
+      for (int i = 0; i < current_encounter->enemy_count; i++) {
+        if (current_encounter->enemies[i].health_points <= 0) {
+          enemies_alive = false;
+        }
+      }
+
+      if (enemies_alive) {
+        phase = PLAYER_END_STEP;
+        phase_time = 0.0f;
+      } else {
+        phase = TURN_TRANSITION_TO_PLAYER;
+        phase_time = 0.0f;
+      }
     }
   } break;
   case PLAYER_END_STEP: {
