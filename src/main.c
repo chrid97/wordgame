@@ -1,6 +1,7 @@
 #include "globals.h"
 #include "raylib.h"
 #include <assert.h>
+#include <math.h>
 #include <stdalign.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -415,7 +416,46 @@ void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
   DrawText(hp_text, text_x, text_y, font_size, WHITE);
 }
 
-void update_draw(void) {
+float get_render_scale(void) {
+  float scale_x = (float)GetScreenWidth() / VIRTUAL_WIDTH;
+  float scale_y = (float)GetScreenHeight() / VIRTUAL_HEIGHT;
+  return fminf(scale_x, scale_y);
+}
+
+Rectangle get_render_dest_rect(void) {
+  float scale = get_render_scale();
+  float width = VIRTUAL_WIDTH * scale;
+  float height = VIRTUAL_HEIGHT * scale;
+
+  return (Rectangle){
+      (GetScreenWidth() - width) * 0.5f,
+      (GetScreenHeight() - height) * 0.5f,
+      width,
+      height,
+  };
+}
+
+Vector2 get_virtual_mouse(RenderTexture2D target) {
+  float scale = fminf((float)GetScreenWidth() / VIRTUAL_WIDTH,
+                      (float)GetScreenHeight() / VIRTUAL_HEIGHT);
+
+  float dest_width = VIRTUAL_WIDTH * scale;
+  float dest_height = VIRTUAL_HEIGHT * scale;
+
+  float dest_x = (GetScreenWidth() - dest_width) * 0.5f;
+  float dest_y = (GetScreenHeight() - dest_height) * 0.5f;
+
+  Vector2 mouse = GetMousePosition();
+
+  Vector2 virtual_mouse = {
+      (mouse.x - dest_x) / scale,
+      (mouse.y - dest_y) / scale,
+  };
+
+  return virtual_mouse;
+}
+
+void update_draw(RenderTexture2D target) {
   //----------------------------------------------------------------------------------
   // Update
   //----------------------------------------------------------------------------------
@@ -572,7 +612,7 @@ void update_draw(void) {
   }
 
   // Move tiles to rack
-  Vector2 mouse_pos = GetMousePosition();
+  Vector2 mouse_pos = get_virtual_mouse(target);
   if (rack_length < MAX_RACK_LENGTH &&
       CheckCollisionPointRec(mouse_pos, board_rect)) {
     const float relative_x = (mouse_pos.x - board_origin_x);
@@ -660,7 +700,9 @@ void update_draw(void) {
   // Draw
   //----------------------------------------------------------------------------------
 draw:
-  BeginDrawing();
+  BeginTextureMode(target);
+  ClearBackground(BLACK);
+
   Rectangle src = {0, 0, background.width, background.height};
   Rectangle background_dest = {0, 0, VIRTUAL_WIDTH, VIRTUAL_HEIGHT};
   DrawTexturePro(background, src, background_dest, (Vector2){0, 0}, 0, WHITE);
@@ -787,11 +829,22 @@ draw:
     DrawText(text, x, y, font_size, WHITE);
   }
 
+  EndTextureMode();
+
+  Rectangle target_dest = get_render_dest_rect();
+  Rectangle target_src = {0, 0, (float)target.texture.width,
+                          -(float)target.texture.height};
+
+  DrawTexturePro(target.texture, target_src, target_dest, (Vector2){0, 0}, 0.0f,
+                 WHITE);
+  BeginDrawing();
   EndDrawing();
 }
 
 int main(int argc, char *argv[]) {
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE);
   InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
+  RenderTexture2D target = LoadRenderTexture(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
   InitAudioDevice();
   SetTargetFPS(60);
 
@@ -851,12 +904,11 @@ int main(int argc, char *argv[]) {
     board[i] = letter_bag.remaining;
     letter_bag.remaining--;
   }
-
 #ifdef PLATFORM_WEB
   emscripten_set_main_loop(update_draw, 0, 1);
 #else
   while (!WindowShouldClose()) {
-    update_draw();
+    update_draw(target);
   }
 #endif
 
