@@ -205,6 +205,8 @@ const float rack_origin_y = board_height;
 Vector2 submit_button_pos = {board_origin_x + board_width + 25,
                              VIRTUAL_HEIGHT - 25};
 float submit_button_radius = 20;
+
+RenderTexture2D target;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
@@ -455,7 +457,7 @@ Vector2 get_virtual_mouse(RenderTexture2D target) {
   return virtual_mouse;
 }
 
-void update_draw(RenderTexture2D target) {
+void update_draw() {
   //----------------------------------------------------------------------------------
   // Update
   //----------------------------------------------------------------------------------
@@ -831,20 +833,23 @@ draw:
 
   EndTextureMode();
 
+  BeginDrawing();
+  ClearBackground(BLACK);
+
   Rectangle target_dest = get_render_dest_rect();
   Rectangle target_src = {0, 0, (float)target.texture.width,
                           -(float)target.texture.height};
 
   DrawTexturePro(target.texture, target_src, target_dest, (Vector2){0, 0}, 0.0f,
                  WHITE);
-  BeginDrawing();
+
   EndDrawing();
 }
 
 int main(int argc, char *argv[]) {
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
   InitWindow(VIRTUAL_WIDTH, VIRTUAL_HEIGHT, "Wordgame");
-  RenderTexture2D target = LoadRenderTexture(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
+  target = LoadRenderTexture(VIRTUAL_WIDTH, VIRTUAL_HEIGHT);
   InitAudioDevice();
   SetTargetFPS(60);
 
@@ -908,7 +913,7 @@ int main(int argc, char *argv[]) {
   emscripten_set_main_loop(update_draw, 0, 1);
 #else
   while (!WindowShouldClose()) {
-    update_draw(target);
+    update_draw();
   }
 #endif
 
