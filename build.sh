@@ -7,7 +7,7 @@ if [ ! -f ./lib/raylib/src/libraylib.a ]; then
 fi
 
 if [[ "$OSTYPE" == "darwin"* ]]; then
-  clang ./main.c \
+  clang ./src/main.c \
     -I./lib/raylib/src/ \
     ./lib/raylib/src/libraylib.a \
     -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo -framework OpenGL \
