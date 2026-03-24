@@ -43,7 +43,7 @@ typedef struct {
   bool looping;
 } Animation;
 
-typedef enum { IDLE, ATTACK, HURT, DEATH } EntityState;
+typedef enum { IDLE, ATTACK, HURT, DEATH, BLOCK } EntityState;
 enum MonsterAbilityFlags {
   POISONS = FLAG(0),
   SELF_DESTRUCT = FLAG(1), // Explodes and dies instead of attacking
@@ -160,7 +160,6 @@ Encounter encounter_table[] = {
          .abilities = POISONS,
          .max_damage = 10,
          .min_damage = 7,
-         .block = 10,
          .tint = WHITE,
      }}},
     {1,
@@ -206,6 +205,8 @@ const float rack_origin_x = 200;
 const float rack_origin_y = board_height;
 Vector2 submit_button_pos = {board_origin_x + board_width + 25,
                              VIRTUAL_HEIGHT - 25};
+Vector2 attack_button_pos = {board_origin_x + board_width + 25,
+                             VIRTUAL_HEIGHT - 70};
 float submit_button_radius = 20;
 
 RenderTexture2D target;
@@ -244,16 +245,13 @@ void entity_take_damage(Entity *entity, int damage) {
   if (entity->block > 0) {
     int new_block = entity->block - damage;
     entity->block -= damage;
-    printf("%i\n", new_block);
     if (new_block < 0) {
-      printf("new block%i\n", new_block);
       unblocked_damage = abs(new_block);
     }
   } else {
     unblocked_damage = damage;
   }
 
-  // printf("%i\n", unblocked_damage);
   entity->health_points -= unblocked_damage;
   if (entity->health_points <= 0) {
     entity->health_points = 0;
@@ -610,6 +608,11 @@ void update_draw() {
       entity_set_state(&player, IDLE);
     }
   } break;
+  case BLOCK: {
+    player.block = player_pending_damage;
+    entity_set_state(&player, IDLE);
+    player.action_applied = true;
+  } break;
   case HURT: {
     player.animation = knight_hurt;
 
@@ -746,6 +749,25 @@ void update_draw() {
     entity_set_state(&player, ATTACK);
   }
 
+  // Block
+  if (valid_word && CheckCollisionPointCircle(mouse_pos, attack_button_pos,
+                                              submit_button_radius)) {
+    printf("Blocked with word %s!\n", selected_word);
+    for (int i = 0; i < rack_length; i++) {
+      uint8_t cell = selected_cells[i];
+      board[cell] = letter_bag.remaining;
+      is_selected[rack[i]] = false;
+      letter_bag.remaining--;
+      printf("Refilled bag with tile %c\n",
+             letter_bag.tiles[letter_bag.remaining].tile_value);
+    };
+
+    rack_length = 0;
+    selected_word[0] = '\0';
+    valid_word = false;
+
+    entity_set_state(&player, BLOCK);
+  }
   // (TODO) Right click should clear rack
   // (MAYBE) right click on selected tile to insert before or after
 
@@ -855,9 +877,16 @@ draw:
   // Word Submit Button
   DrawCircleV(submit_button_pos, submit_button_radius,
               valid_word ? GREEN : GRAY);
-  DrawText("Submit", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
+  DrawText("ATTACK", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
            BLACK);
   DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
+
+  // Block Button
+  DrawCircleV(attack_button_pos, submit_button_radius,
+              valid_word ? GREEN : GRAY);
+  DrawText("BLOCK", attack_button_pos.x - 15, attack_button_pos.y - 5, 10,
+           BLACK);
+  DrawCircleLinesV(attack_button_pos, submit_button_radius, BLACK);
 
   // Draw turn transitions
   // (MAYBE) player text should appear at max text size with low opacity and
