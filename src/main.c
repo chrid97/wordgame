@@ -578,6 +578,7 @@ void update_draw() {
   } break;
   case ENEMY_END_STEP: {
     if (phase_time >= TURN_TRANSITION_DURATION) {
+      player.block = 0;
       phase = TURN_TRANSITION_TO_PLAYER;
       phase_time = 0.0f;
     }
