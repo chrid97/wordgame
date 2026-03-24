@@ -59,6 +59,7 @@ typedef struct {
 
   int max_health_points;
   int health_points;
+  int block;
 
   uint8_t min_damage;
   uint8_t max_damage;
@@ -159,6 +160,7 @@ Encounter encounter_table[] = {
          .abilities = POISONS,
          .max_damage = 10,
          .min_damage = 7,
+         .block = 10,
          .tint = WHITE,
      }}},
     {1,
@@ -237,7 +239,22 @@ void entity_take_damage(Entity *entity, int damage) {
     return;
   }
 
-  entity->health_points -= damage;
+  int unblocked_damage = 0;
+  // If Entity has block deal damage to block
+  if (entity->block > 0) {
+    int new_block = entity->block - damage;
+    entity->block -= damage;
+    printf("%i\n", new_block);
+    if (new_block < 0) {
+      printf("new block%i\n", new_block);
+      unblocked_damage = abs(new_block);
+    }
+  } else {
+    unblocked_damage = damage;
+  }
+
+  // printf("%i\n", unblocked_damage);
+  entity->health_points -= unblocked_damage;
   if (entity->health_points <= 0) {
     entity->health_points = 0;
     entity_set_state(entity, DEATH);
@@ -386,7 +403,8 @@ void draw_animation(Animation anim, float t, Rectangle dest, Color tint) {
   DrawTexturePro(anim.texture, src, dest, (Vector2){0, 0}, 0, tint);
 }
 
-void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
+void draw_health_bar(Rectangle bar, int current_hp, int max_hp, int block) {
+  // HP bar background
   DrawRectangleRec(bar, GRAY);
   DrawRectangleRoundedLinesEx(bar, 100, 4, 1, BLACK);
 
@@ -394,6 +412,7 @@ void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
   fill.width = ((float)current_hp / max_hp) * bar.width;
   DrawRectangleRec(fill, RED);
 
+  // HP text
   char hp_text[32];
   snprintf(hp_text, sizeof(hp_text), "%d/%d", current_hp, max_hp);
 
@@ -403,7 +422,6 @@ void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
   int text_x = bar.x + (bar.width - text_width) / 2;
   int text_y = bar.y - (float)font_size / 3;
 
-  // --- BLACK (draw multiple times) ---
   DrawText(hp_text, text_x - 2, text_y, font_size, BLACK);
   DrawText(hp_text, text_x + 2, text_y, font_size, BLACK);
   DrawText(hp_text, text_x, text_y - 2, font_size, BLACK);
@@ -414,8 +432,41 @@ void draw_health_bar(Rectangle bar, uint8_t current_hp, uint8_t max_hp) {
   DrawText(hp_text, text_x - 1, text_y + 1, font_size, BLACK);
   DrawText(hp_text, text_x + 1, text_y + 1, font_size, BLACK);
 
-  // --- main text ---
   DrawText(hp_text, text_x, text_y, font_size, WHITE);
+
+  // Block indicator
+  if (block > 0) {
+    const int icon_size = 16;
+    const int gap = 6;
+
+    Rectangle shield = {bar.x - icon_size - gap,
+                        bar.y + (bar.height - icon_size) / 2.0f, icon_size,
+                        icon_size};
+
+    // simple square/shield icon
+    DrawRectangleRec(shield, SKYBLUE);
+    DrawRectangleLinesEx(shield, 2, BLUE);
+
+    // block number
+    char block_text[16];
+    snprintf(block_text, sizeof(block_text), "%d", block);
+
+    int block_font_size = 12;
+    int block_text_width = MeasureText(block_text, block_font_size);
+    int block_text_x = shield.x + (shield.width - block_text_width) / 2;
+    int block_text_y = shield.y + (shield.height - block_font_size) / 2;
+
+    DrawText(block_text, block_text_x - 1, block_text_y, block_font_size,
+             BLACK);
+    DrawText(block_text, block_text_x + 1, block_text_y, block_font_size,
+             BLACK);
+    DrawText(block_text, block_text_x, block_text_y - 1, block_font_size,
+             BLACK);
+    DrawText(block_text, block_text_x, block_text_y + 1, block_font_size,
+             BLACK);
+
+    DrawText(block_text, block_text_x, block_text_y, block_font_size, WHITE);
+  }
 }
 
 float get_render_scale(void) {
@@ -730,8 +781,8 @@ draw:
       80,
       6,
   };
-  draw_health_bar(player_health, player.health_points,
-                  player.max_health_points);
+  draw_health_bar(player_health, player.health_points, player.max_health_points,
+                  player.block);
 
   // Draw Enemies
   for (int i = 0; i < current_encounter->enemy_count; i++) {
@@ -757,7 +808,7 @@ draw:
         6,
     };
     draw_health_bar(enemy_health, enemy->health_points,
-                    enemy->max_health_points);
+                    enemy->max_health_points, enemy->block);
   }
 
   // draw board
