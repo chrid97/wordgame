@@ -9,9 +9,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
 #ifdef PLATFORM_WEB
 #include <emscripten/emscripten.h>
 #endif
+
+typedef int8_t i8;
+typedef int16_t i16;
+typedef int32_t i32;
+typedef int64_t i64;
+
+typedef uint8_t u8;
+typedef uint16_t u16;
+typedef uint32_t u32;
+typedef uint64_t u64;
 
 #define VIRTUAL_WIDTH 640
 #define VIRTUAL_HEIGHT 360
@@ -66,6 +77,8 @@ typedef struct {
 
   EntityState state;
   uint8_t abilities;
+
+  // int intent;
   // tile modifiers
   // uint8_t modifiers;
 
