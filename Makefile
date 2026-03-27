@@ -6,6 +6,9 @@ build:
 run:
 	@bash ./build.sh && ./build/wordgame.exe
 
+tmux:
+	@bash ./build.sh && ./build/wordgame.exe
+
 web:
 	mkdir -p build
 	emcc ./src/main.c \
