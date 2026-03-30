@@ -106,6 +106,12 @@ typedef enum {
   ENEMY_END_STEP,
 } Phase;
 
+// (TODO) Come up with a better name
+typedef enum {
+  COMBAT,
+  REWARD,
+} Screen;
+
 typedef struct {
   uint8_t enemy_count;
   Entity enemies[MAX_ENCOUNTER_ENEMIES];
@@ -226,6 +232,55 @@ RenderTexture2D target;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
+
+typedef struct {
+  u8 word_length;
+  u16 modifiers;
+  const char *equipment_name;
+  const char *equipment_description;
+} Equipment;
+bool button(int center_x, int center_y, float radius, Color color) {
+  Vector2 mouse = GetMousePosition();
+  Color outerPink = {247, 93, 117, 255};
+  Color innerDark = {157, 52, 58, 255};
+
+  u8 word_length = 4;
+
+  // Outline
+  Rectangle bounds = {0, 0, 175, 100};
+  DrawRectangleRounded(bounds, 0.12f, 12, outerPink);
+
+  int bounds_center_x = (bounds.width / 2.0f);
+  int bounds_center_y = (bounds.height / 2.0f);
+
+  // Draw Centered Text
+  const char *text = "SWORD";
+  int font_size = 15;
+  int text_width = MeasureText(text, font_size);
+  DrawText(text, bounds.x + bounds_center_x - text_width / 2.0f, bounds.y + 10,
+           font_size, WHITE);
+
+  // Tiles
+  int gap = 5;
+  float total_tiles_width = word_length * TILE_SIZE + (word_length - 1) * gap;
+  float tile_y = bounds.y + bounds.height / 2.0f - TILE_SIZE / 2.0f;
+  float start_x = bounds.x + bounds.width / 2.0f - total_tiles_width / 2.0f;
+  for (int i = 0; i < word_length; i++) {
+    Rectangle tile = {
+        start_x + i * (TILE_SIZE + gap),
+        tile_y,
+        TILE_SIZE,
+        TILE_SIZE,
+    };
+    DrawRectangleLinesEx(tile, 1, WHITE);
+  }
+
+  if (true) {
+    return true;
+  }
+
+  return false;
+}
 
 int calculate_rack_damage(void) {
   int damage = 0;
@@ -889,18 +944,19 @@ draw:
   }
 
   // Word Submit Button
-  DrawCircleV(submit_button_pos, submit_button_radius,
-              valid_word ? GREEN : GRAY);
-  DrawText("ATTACK", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
-           BLACK);
-  DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
+  // DrawCircleV(submit_button_pos, submit_button_radius,
+  //             valid_word ? GREEN : GRAY);
+  // DrawText("ATTACK", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
+  //          BLACK);
+  // DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
+  button(submit_button_pos.x, submit_button_pos.y, submit_button_radius, GREEN);
 
   // Block Button
-  DrawCircleV(attack_button_pos, submit_button_radius,
-              valid_word ? GREEN : GRAY);
-  DrawText("BLOCK", attack_button_pos.x - 15, attack_button_pos.y - 5, 10,
-           BLACK);
-  DrawCircleLinesV(attack_button_pos, submit_button_radius, BLACK);
+  // DrawCircleV(attack_button_pos, submit_button_radius,
+  //             valid_word ? GREEN : GRAY);
+  // DrawText("BLOCK", attack_button_pos.x - 15, attack_button_pos.y - 5, 10,
+  //          BLACK);
+  // DrawCircleLinesV(attack_button_pos, submit_button_radius, BLACK);
 
   // Draw turn transitions
   // (MAYBE) player text should appear at max text size with low opacity and
@@ -1022,3 +1078,7 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
+
+// Odds and Ends
+// Immediate mode UI
+// map
