@@ -44,7 +44,6 @@ typedef uint64_t u64;
 //----------------------------------------------------------------------------------
 // Types
 //----------------------------------------------------------------------------------
-
 typedef struct {
   Texture2D texture;
   int frame_width;
@@ -163,11 +162,13 @@ float phase_time = 0.0f;
 Phase phase = TURN_TRANSITION_TO_PLAYER;
 
 int player_pending_damage = 0;
-Entity player = {.state = IDLE,
-                 .action_applied = false,
-                 .health_points = 60,
-                 .max_health_points = 60,
-                 .tint = WHITE};
+Entity player = {
+    .state = IDLE,
+    .action_applied = false,
+    .health_points = 60,
+    .max_health_points = 60,
+    .tint = WHITE,
+};
 
 // (TODO) Clearer name for this?
 int encounter_index = 0;
@@ -226,20 +227,25 @@ Vector2 submit_button_pos = {board_origin_x + board_width + 25,
                              VIRTUAL_HEIGHT - 25};
 Vector2 attack_button_pos = {board_origin_x + board_width + 25,
                              VIRTUAL_HEIGHT - 70};
-float submit_button_radius = 20;
+// float submit_button_radius = 20;
 
 RenderTexture2D target;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
 
+typedef enum {
+  EQUIPMENT_ATTACK = FLAG(0),
+  EQUIPMENT_BLOCK = FLAG(1), // Explodes and dies instead of attacking
+} EquipmentFlags;
 typedef struct {
   u8 word_length;
   u16 modifiers;
   const char *equipment_name;
   const char *equipment_description;
 } Equipment;
-bool button(int center_x, int center_y, float radius, Color color) {
+
+bool button(int origin_x, int origin_y, Color color) {
   Vector2 mouse = GetMousePosition();
   Color outerPink = {247, 93, 117, 255};
   Color innerDark = {157, 52, 58, 255};
@@ -247,17 +253,18 @@ bool button(int center_x, int center_y, float radius, Color color) {
   u8 word_length = 4;
 
   // Outline
-  Rectangle bounds = {0, 0, 175, 100};
+  // width should be dependent on word_length
+  Rectangle bounds = {origin_x, origin_y, 175, 100};
   DrawRectangleRounded(bounds, 0.12f, 12, outerPink);
 
   int bounds_center_x = (bounds.width / 2.0f);
   int bounds_center_y = (bounds.height / 2.0f);
 
   // Draw Centered Text
-  const char *text = "SWORD";
+  const char *title = "SWORD";
   int font_size = 15;
-  int text_width = MeasureText(text, font_size);
-  DrawText(text, bounds.x + bounds_center_x - text_width / 2.0f, bounds.y + 10,
+  int text_width = MeasureText(title, font_size);
+  DrawText(title, bounds.x + bounds_center_x - text_width / 2.0f, bounds.y + 10,
            font_size, WHITE);
 
   // Tiles
@@ -275,7 +282,18 @@ bool button(int center_x, int center_y, float radius, Color color) {
     DrawRectangleLinesEx(tile, 1, WHITE);
   }
 
-  if (true) {
+  char description[32];
+  snprintf(description, sizeof(description), "Deal damage [%d]",
+           player_pending_damage);
+  // const char *description = "Deal damage[]";
+  int size = 15;
+  int t_width = MeasureText(description, size);
+  DrawText(description, bounds.x + bounds_center_x - t_width / 2.0f,
+           bounds.y + bounds.height - size - 10, size, WHITE);
+
+  if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+      CheckCollisionPointRec(mouse, bounds)) {
+    printf("clicked on sword\n");
     return true;
   }
 
@@ -737,106 +755,108 @@ void update_draw() {
   }
 
   // Move tiles to rack
-  Vector2 mouse_pos = get_virtual_mouse(target);
-  if (rack_length < MAX_RACK_LENGTH &&
-      CheckCollisionPointRec(mouse_pos, board_rect)) {
-    const float relative_x = (mouse_pos.x - board_origin_x);
-    const float relative_y = (mouse_pos.y - board_origin_y);
-
-    const uint8_t col = relative_x / pitch;
-    const uint8_t row = relative_y / pitch;
-    const uint8_t cell = col + (row * BOARD_COL);
-
-    printf("[click] cell=%u row=%u col=%u tile='%c' (idx=%u)\n", cell, row, col,
-           letter_bag.tiles[board[cell]].tile_value, board[cell]);
-
-    uint8_t tile_idx = board[cell];
-    if (!is_selected[tile_idx]) {
-      rack[rack_length] = tile_idx;
-      is_selected[tile_idx] = true;
-
-      selected_word[rack_length] = letter_bag.tiles[tile_idx].tile_value;
-      selected_word[rack_length + 1] = '\0';
-      selected_cells[rack_length] = cell;
-
-      rack_length++;
-
-      valid_word =
-          rack_length > 0 &&
-          binary_search_word(word_pointers, selected_word, total_words);
-      PlaySound(keystroke_sound);
-    } else {
-      printf("Tile already selected\n");
-    }
-    player_pending_damage = calculate_rack_damage();
-
-    printf("Current word: %s\n", selected_word);
-  }
+  // Vector2 mouse_pos = get_virtual_mouse(target);
+  // if (rack_length < MAX_RACK_LENGTH &&
+  //     CheckCollisionPointRec(mouse_pos, board_rect)) {
+  //   const float relative_x = (mouse_pos.x - board_origin_x);
+  //   const float relative_y = (mouse_pos.y - board_origin_y);
+  //
+  //   const uint8_t col = relative_x / pitch;
+  //   const uint8_t row = relative_y / pitch;
+  //   const uint8_t cell = col + (row * BOARD_COL);
+  //
+  //   printf("[click] cell=%u row=%u col=%u tile='%c' (idx=%u)\n", cell, row,
+  //   col,
+  //          letter_bag.tiles[board[cell]].tile_value, board[cell]);
+  //
+  //   uint8_t tile_idx = board[cell];
+  //   if (!is_selected[tile_idx]) {
+  //     rack[rack_length] = tile_idx;
+  //     is_selected[tile_idx] = true;
+  //
+  //     selected_word[rack_length] = letter_bag.tiles[tile_idx].tile_value;
+  //     selected_word[rack_length + 1] = '\0';
+  //     selected_cells[rack_length] = cell;
+  //
+  //     rack_length++;
+  //
+  //     valid_word =
+  //         rack_length > 0 &&
+  //         binary_search_word(word_pointers, selected_word, total_words);
+  //     PlaySound(keystroke_sound);
+  //   } else {
+  //     printf("Tile already selected\n");
+  //   }
+  //   player_pending_damage = calculate_rack_damage();
+  //
+  //   printf("Current word: %s\n", selected_word);
+  // }
 
   // Deselect tiles
-  if (CheckCollisionPointRec(mouse_pos,
-                             (Rectangle){rack_origin_x, rack_origin_y,
-                                         (TILE_SIZE + padding) * rack_length,
-                                         TILE_SIZE})) {
-    const float relative_x = mouse_pos.x - rack_origin_x;
-    const int cell = relative_x / (TILE_SIZE + padding);
-    printf("[click] Deselect tile %c\n",
-           letter_bag.tiles[rack[cell]].tile_value);
-
-    // Set selected tiles to false
-    for (int i = cell; i < rack_length; i++) {
-      is_selected[rack[i]] = false;
-    }
-    rack_length = cell;
-    selected_word[rack_length] = '\0';
-
-    valid_word = rack_length > 0 &&
-                 binary_search_word(word_pointers, selected_word, total_words);
-    printf("Current word: %s\n", selected_word);
-
-    player_pending_damage = calculate_rack_damage();
-    PlaySound(backspace_sound);
-  }
+  // if (CheckCollisionPointRec(mouse_pos,
+  //                            (Rectangle){rack_origin_x, rack_origin_y,
+  //                                        (TILE_SIZE + padding) * rack_length,
+  //                                        TILE_SIZE})) {
+  //   const float relative_x = mouse_pos.x - rack_origin_x;
+  //   const int cell = relative_x / (TILE_SIZE + padding);
+  //   printf("[click] Deselect tile %c\n",
+  //          letter_bag.tiles[rack[cell]].tile_value);
+  //
+  //   // Set selected tiles to false
+  //   for (int i = cell; i < rack_length; i++) {
+  //     is_selected[rack[i]] = false;
+  //   }
+  //   rack_length = cell;
+  //   selected_word[rack_length] = '\0';
+  //
+  //   valid_word = rack_length > 0 &&
+  //                binary_search_word(word_pointers, selected_word,
+  //                total_words);
+  //   printf("Current word: %s\n", selected_word);
+  //
+  //   player_pending_damage = calculate_rack_damage();
+  //   PlaySound(backspace_sound);
+  // }
 
   // Submit word / Attack
-  if (valid_word && CheckCollisionPointCircle(mouse_pos, submit_button_pos,
-                                              submit_button_radius)) {
-    printf("Submitted word %s!\n", selected_word);
-    for (int i = 0; i < rack_length; i++) {
-      uint8_t cell = selected_cells[i];
-      board[cell] = letter_bag.remaining;
-      is_selected[rack[i]] = false;
-      letter_bag.remaining--;
-      printf("Refilled bag with tile %c\n",
-             letter_bag.tiles[letter_bag.remaining].tile_value);
-    };
-
-    rack_length = 0;
-    selected_word[0] = '\0';
-    valid_word = false;
-
-    entity_set_state(&player, ATTACK);
-  }
+  // if (valid_word && CheckCollisionPointCircle(mouse_pos, submit_button_pos,
+  //                                             submit_button_radius)) {
+  //   printf("Submitted word %s!\n", selected_word);
+  //   for (int i = 0; i < rack_length; i++) {
+  //     uint8_t cell = selected_cells[i];
+  //     board[cell] = letter_bag.remaining;
+  //     is_selected[rack[i]] = false;
+  //     letter_bag.remaining--;
+  //     printf("Refilled bag with tile %c\n",
+  //            letter_bag.tiles[letter_bag.remaining].tile_value);
+  //   };
+  //
+  //   rack_length = 0;
+  //   selected_word[0] = '\0';
+  //   valid_word = false;
+  //
+  //   entity_set_state(&player, ATTACK);
+  // }
 
   // Block
-  if (valid_word && CheckCollisionPointCircle(mouse_pos, attack_button_pos,
-                                              submit_button_radius)) {
-    printf("Blocked with word %s!\n", selected_word);
-    for (int i = 0; i < rack_length; i++) {
-      uint8_t cell = selected_cells[i];
-      board[cell] = letter_bag.remaining;
-      is_selected[rack[i]] = false;
-      letter_bag.remaining--;
-      printf("Refilled bag with tile %c\n",
-             letter_bag.tiles[letter_bag.remaining].tile_value);
-    };
-
-    rack_length = 0;
-    selected_word[0] = '\0';
-    valid_word = false;
-
-    entity_set_state(&player, BLOCK);
-  }
+  // if (valid_word && CheckCollisionPointCircle(mouse_pos, attack_button_pos,
+  //                                             submit_button_radius)) {
+  //   printf("Blocked with word %s!\n", selected_word);
+  //   for (int i = 0; i < rack_length; i++) {
+  //     uint8_t cell = selected_cells[i];
+  //     board[cell] = letter_bag.remaining;
+  //     is_selected[rack[i]] = false;
+  //     letter_bag.remaining--;
+  //     printf("Refilled bag with tile %c\n",
+  //            letter_bag.tiles[letter_bag.remaining].tile_value);
+  //   };
+  //
+  //   rack_length = 0;
+  //   selected_word[0] = '\0';
+  //   valid_word = false;
+  //
+  //   entity_set_state(&player, BLOCK);
+  // }
   // (TODO) Right click should clear rack
   // (MAYBE) right click on selected tile to insert before or after
 
@@ -913,35 +933,36 @@ draw:
   }
 
   // Draw pending damage
-  if (rack_length > 0) {
-    char damage_text[32];
-    snprintf(damage_text, sizeof(damage_text), "Damage: %d",
-             player_pending_damage);
-
-    int font_size = 20;
-    int text_x = rack_origin_x;
-    int text_y = rack_origin_y - 28;
-
-    DrawText(damage_text, text_x - 1, text_y, font_size, BLACK);
-    DrawText(damage_text, text_x + 1, text_y, font_size, BLACK);
-    DrawText(damage_text, text_x, text_y - 1, font_size, BLACK);
-    DrawText(damage_text, text_x, text_y + 1, font_size, BLACK);
-
-    DrawText(damage_text, text_x, text_y, font_size, valid_word ? RED : GRAY);
-  }
+  // if (rack_length > 0) {
+  //   char damage_text[32];
+  //   snprintf(damage_text, sizeof(damage_text), "Damage: %d",
+  //            player_pending_damage);
+  //
+  //   int font_size = 20;
+  //   int text_x = rack_origin_x;
+  //   int text_y = rack_origin_y - 28;
+  //
+  //   DrawText(damage_text, text_x - 1, text_y, font_size, BLACK);
+  //   DrawText(damage_text, text_x + 1, text_y, font_size, BLACK);
+  //   DrawText(damage_text, text_x, text_y - 1, font_size, BLACK);
+  //   DrawText(damage_text, text_x, text_y + 1, font_size, BLACK);
+  //
+  //   DrawText(damage_text, text_x, text_y, font_size, valid_word ? RED :
+  //   GRAY);
+  // }
 
   // Draw Rack
-  for (int i = 0; i < MAX_RACK_LENGTH; i++) {
-    const int x = rack_origin_x + (i * (TILE_SIZE + padding));
-    DrawRectangle(x, rack_origin_y, TILE_SIZE, TILE_SIZE, GRAY);
-  }
+  // for (int i = 0; i < MAX_RACK_LENGTH; i++) {
+  //   const int x = rack_origin_x + (i * (TILE_SIZE + padding));
+  //   DrawRectangle(x, rack_origin_y, TILE_SIZE, TILE_SIZE, GRAY);
+  // }
 
   // Draw Chosen Tiles on Rack
-  for (int i = 0; i < rack_length; i++) {
-    const int x = rack_origin_x + (i * (TILE_SIZE + padding));
-    draw_tile(rack[i], (Rectangle){x, rack_origin_y, TILE_SIZE, TILE_SIZE},
-              false);
-  }
+  // for (int i = 0; i < rack_length; i++) {
+  //   const int x = rack_origin_x + (i * (TILE_SIZE + padding));
+  //   draw_tile(rack[i], (Rectangle){x, rack_origin_y, TILE_SIZE, TILE_SIZE},
+  //             false);
+  // }
 
   // Word Submit Button
   // DrawCircleV(submit_button_pos, submit_button_radius,
@@ -949,7 +970,10 @@ draw:
   // DrawText("ATTACK", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
   //          BLACK);
   // DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
-  button(submit_button_pos.x, submit_button_pos.y, submit_button_radius, GREEN);
+
+  // Vector2 sword_equipment = {board_origin_x + board_width + 25,
+  //                            VIRTUAL_HEIGHT - 25};
+  button(rack_origin_x, rack_origin_y, GREEN);
 
   // Block Button
   // DrawCircleV(attack_button_pos, submit_button_radius,
