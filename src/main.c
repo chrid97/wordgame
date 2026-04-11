@@ -35,7 +35,7 @@ typedef uint64_t u64;
 #define TILE_SIZE 32
 // #define TILE_NONE 0xFF // Sentinel Value
 // (TODO) make it so you can upgrade number of racks
-#define MAX_RACK_LENGTH 6
+#define MAX_SELECTED_TILES 10
 #define MAX_ENCOUNTER_ENEMIES 3
 
 #define TURN_TRANSITION_DURATION 1.0f
@@ -124,13 +124,13 @@ int total_words = 0;
 LetterBag letter_bag = {0};
 
 // Rack
-uint8_t rack[MAX_RACK_LENGTH] = {0}; // index to tile in letter bag
+uint8_t rack[MAX_SELECTED_TILES] = {0}; // index to tile in letter bag
 uint8_t rack_length = 0;
 
-char selected_word[MAX_RACK_LENGTH + 1] = {0}; // actual word
+char selected_word[MAX_SELECTED_TILES + 1] = {0}; // actual word
 
-uint8_t board[BOARD_COUNT] = {0};              // index to tiles in bag
-uint8_t selected_cells[MAX_RACK_LENGTH] = {0}; // Selected board index
+uint8_t board[BOARD_COUNT] = {0};                 // index to tiles in bag
+uint8_t selected_cells[MAX_SELECTED_TILES] = {0}; // Selected board index
 
 bool is_selected[LETTER_BAG_SIZE] = {0};
 bool valid_word = false;
@@ -233,24 +233,59 @@ RenderTexture2D target;
 //----------------------------------------------------------------------------------
 // Functions
 //----------------------------------------------------------------------------------
+Vector2 get_virtual_mouse(RenderTexture2D target) {
+  float scale = fminf((float)GetScreenWidth() / VIRTUAL_WIDTH,
+                      (float)GetScreenHeight() / VIRTUAL_HEIGHT);
+
+  float dest_width = VIRTUAL_WIDTH * scale;
+  float dest_height = VIRTUAL_HEIGHT * scale;
+
+  float dest_x = (GetScreenWidth() - dest_width) * 0.5f;
+  float dest_y = (GetScreenHeight() - dest_height) * 0.5f;
+
+  Vector2 mouse = GetMousePosition();
+
+  Vector2 virtual_mouse = {
+      (mouse.x - dest_x) / scale,
+      (mouse.y - dest_y) / scale,
+  };
+
+  return virtual_mouse;
+}
 
 typedef enum {
   EQUIPMENT_ATTACK = FLAG(0),
-  EQUIPMENT_BLOCK = FLAG(1), // Explodes and dies instead of attacking
+  EQUIPMENT_BLOCK = FLAG(1),
 } EquipmentFlags;
 typedef struct {
   u8 word_length;
   u16 modifiers;
-  const char *equipment_name;
-  const char *equipment_description;
+  const char *name;
+  const char *description;
 } Equipment;
 
-bool button(int origin_x, int origin_y, Color color) {
+Equipment sword = {
+    .word_length = 4,
+    .name = "SWORD",
+    .description = "Deal damage [%d]",
+    .modifiers = EQUIPMENT_ATTACK,
+};
+
+Equipment shield = {
+    .word_length = 4,
+    .name = "SHIELD",
+    .description = "Block [%d]",
+    .modifiers = EQUIPMENT_BLOCK,
+};
+
+int active_equipment_idx;
+Equipment players_equipment[10] = {0};
+
+bool equipment_button(Equipment equip, int origin_x, int origin_y,
+                      Color color) {
   Vector2 mouse = GetMousePosition();
   Color outerPink = {247, 93, 117, 255};
   Color innerDark = {157, 52, 58, 255};
-
-  u8 word_length = 4;
 
   // Outline
   // width should be dependent on word_length
@@ -261,18 +296,18 @@ bool button(int origin_x, int origin_y, Color color) {
   int bounds_center_y = (bounds.height / 2.0f);
 
   // Draw Centered Text
-  const char *title = "SWORD";
   int font_size = 15;
-  int text_width = MeasureText(title, font_size);
-  DrawText(title, bounds.x + bounds_center_x - text_width / 2.0f, bounds.y + 10,
-           font_size, WHITE);
+  int text_width = MeasureText(equip.name, font_size);
+  DrawText(equip.name, bounds.x + bounds_center_x - text_width / 2.0f,
+           bounds.y + 10, font_size, WHITE);
 
   // Tiles
   int gap = 5;
-  float total_tiles_width = word_length * TILE_SIZE + (word_length - 1) * gap;
+  float total_tiles_width =
+      equip.word_length * TILE_SIZE + (equip.word_length - 1) * gap;
   float tile_y = bounds.y + bounds.height / 2.0f - TILE_SIZE / 2.0f;
   float start_x = bounds.x + bounds.width / 2.0f - total_tiles_width / 2.0f;
-  for (int i = 0; i < word_length; i++) {
+  for (int i = 0; i < equip.word_length; i++) {
     Rectangle tile = {
         start_x + i * (TILE_SIZE + gap),
         tile_y,
@@ -283,9 +318,8 @@ bool button(int origin_x, int origin_y, Color color) {
   }
 
   char description[32];
-  snprintf(description, sizeof(description), "Deal damage [%d]",
+  snprintf(description, sizeof(description), equip.description,
            player_pending_damage);
-  // const char *description = "Deal damage[]";
   int size = 15;
   int t_width = MeasureText(description, size);
   DrawText(description, bounds.x + bounds_center_x - t_width / 2.0f,
@@ -433,7 +467,7 @@ void load_words() {
   fclose(file);
 }
 
-void draw_tile(int tile_idx, Rectangle rect, bool selected) {
+bool draw_tile(int tile_idx, Rectangle rect, bool selected) {
   Color tint = selected ? GRAY : WHITE;
   if (letter_bag.tiles[tile_idx].poisoned) {
     tint = GREEN;
@@ -466,6 +500,15 @@ void draw_tile(int tile_idx, Rectangle rect, bool selected) {
   DrawText(score_text, text_x, text_y + 1, font_size, BLACK);
 
   DrawText(score_text, text_x, text_y, font_size, WHITE);
+
+  Vector2 mouse = get_virtual_mouse(target);
+  if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+      CheckCollisionPointRec(mouse, rect)) {
+    printf("clicked on tile\n");
+    return true;
+  }
+
+  return false;
 }
 
 int entity_current_frame(Entity *e) {
@@ -572,26 +615,6 @@ Rectangle get_render_dest_rect(void) {
   };
 }
 
-Vector2 get_virtual_mouse(RenderTexture2D target) {
-  float scale = fminf((float)GetScreenWidth() / VIRTUAL_WIDTH,
-                      (float)GetScreenHeight() / VIRTUAL_HEIGHT);
-
-  float dest_width = VIRTUAL_WIDTH * scale;
-  float dest_height = VIRTUAL_HEIGHT * scale;
-
-  float dest_x = (GetScreenWidth() - dest_width) * 0.5f;
-  float dest_y = (GetScreenHeight() - dest_height) * 0.5f;
-
-  Vector2 mouse = GetMousePosition();
-
-  Vector2 virtual_mouse = {
-      (mouse.x - dest_x) / scale,
-      (mouse.y - dest_y) / scale,
-  };
-
-  return virtual_mouse;
-}
-
 void update_draw() {
   //----------------------------------------------------------------------------------
   // Update
@@ -605,6 +628,10 @@ void update_draw() {
   phase_time += dt;
 
   Encounter *current_encounter = &encounter_table[encounter_index];
+
+  // 0 is nil
+  players_equipment[1] = sword;
+  players_equipment[2] = shield;
 
   for (int i = 0; i < current_encounter->enemy_count; i++) {
     current_encounter->enemies[i].state_time += dt;
@@ -756,7 +783,7 @@ void update_draw() {
 
   // Move tiles to rack
   // Vector2 mouse_pos = get_virtual_mouse(target);
-  // if (rack_length < MAX_RACK_LENGTH &&
+  // if (rack_length < MAX_SELECTED_TILES &&
   //     CheckCollisionPointRec(mouse_pos, board_rect)) {
   //   const float relative_x = (mouse_pos.x - board_origin_x);
   //   const float relative_y = (mouse_pos.y - board_origin_y);
@@ -928,59 +955,43 @@ draw:
     const uint8_t col = i % BOARD_COL;
     const int x = board_origin_x + (col * (TILE_SIZE + padding));
     const int y = board_origin_y + (row * (TILE_SIZE + padding));
-    draw_tile(board[i], (Rectangle){x, y, TILE_SIZE, TILE_SIZE},
-              is_selected[board[i]]);
+    bool tile_clicked =
+        draw_tile(board[i], (Rectangle){x, y, TILE_SIZE, TILE_SIZE},
+                  is_selected[board[i]]);
+    if (tile_clicked) {
+      // move tile to equipment
+      // players_equipment[active_equipment_idx];
+      rack[rack_length] = board[i];
+      rack_length++;
+    }
   }
 
-  // Draw pending damage
-  // if (rack_length > 0) {
-  //   char damage_text[32];
-  //   snprintf(damage_text, sizeof(damage_text), "Damage: %d",
-  //            player_pending_damage);
-  //
-  //   int font_size = 20;
-  //   int text_x = rack_origin_x;
-  //   int text_y = rack_origin_y - 28;
-  //
-  //   DrawText(damage_text, text_x - 1, text_y, font_size, BLACK);
-  //   DrawText(damage_text, text_x + 1, text_y, font_size, BLACK);
-  //   DrawText(damage_text, text_x, text_y - 1, font_size, BLACK);
-  //   DrawText(damage_text, text_x, text_y + 1, font_size, BLACK);
-  //
-  //   DrawText(damage_text, text_x, text_y, font_size, valid_word ? RED :
-  //   GRAY);
-  // }
+  if (active_equipment_idx != 0) {
+    if (equipment_button(players_equipment[active_equipment_idx], rack_origin_x,
+                         rack_origin_y, GREEN)) {
+      active_equipment_idx = 0;
+    }
+  }
 
-  // Draw Rack
-  // for (int i = 0; i < MAX_RACK_LENGTH; i++) {
-  //   const int x = rack_origin_x + (i * (TILE_SIZE + padding));
-  //   DrawRectangle(x, rack_origin_y, TILE_SIZE, TILE_SIZE, GRAY);
-  // }
+  for (int i = 0; i < players_equipment[active_equipment_idx].word_length;
+       i++) {
+    draw_tile(rack[i],
+              (Rectangle){100 + 40 * i, GetScreenHeight() / 2.0f, TILE_SIZE,
+                          TILE_SIZE},
+              false);
+    // printf("yo\n");
+    printf("%c\n", letter_bag.tiles[rack[i]].tile_value);
+  }
 
-  // Draw Chosen Tiles on Rack
-  // for (int i = 0; i < rack_length; i++) {
-  //   const int x = rack_origin_x + (i * (TILE_SIZE + padding));
-  //   draw_tile(rack[i], (Rectangle){x, rack_origin_y, TILE_SIZE, TILE_SIZE},
-  //             false);
-  // }
+  for (int i = 1; i < 3; i++) {
+    if (i == active_equipment_idx) {
+      continue;
+    }
 
-  // Word Submit Button
-  // DrawCircleV(submit_button_pos, submit_button_radius,
-  //             valid_word ? GREEN : GRAY);
-  // DrawText("ATTACK", submit_button_pos.x - 15, submit_button_pos.y - 5, 10,
-  //          BLACK);
-  // DrawCircleLinesV(submit_button_pos, submit_button_radius, BLACK);
-
-  // Vector2 sword_equipment = {board_origin_x + board_width + 25,
-  //                            VIRTUAL_HEIGHT - 25};
-  button(rack_origin_x, rack_origin_y, GREEN);
-
-  // Block Button
-  // DrawCircleV(attack_button_pos, submit_button_radius,
-  //             valid_word ? GREEN : GRAY);
-  // DrawText("BLOCK", attack_button_pos.x - 15, attack_button_pos.y - 5, 10,
-  //          BLACK);
-  // DrawCircleLinesV(attack_button_pos, submit_button_radius, BLACK);
+    if (equipment_button(players_equipment[i], i * 200, 0, GREEN)) {
+      active_equipment_idx = i;
+    }
+  }
 
   // Draw turn transitions
   // (MAYBE) player text should appear at max text size with low opacity and
